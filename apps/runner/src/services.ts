@@ -18,5 +18,5 @@ export function githubService(): GitHubAppService {
 }
 
 export function executorSourceDirectory(): string {
-  return resolve(workspaceRoot, runnerConfig.ZEROPS_EXECUTOR_SOURCE_DIRECTORY);
+  return resolve(workspaceRoot, runnerConfig.TRIALRUN_ZEROPS_EXECUTOR_SOURCE_DIRECTORY);
 }

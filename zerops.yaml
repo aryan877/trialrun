@@ -66,8 +66,8 @@ zerops:
         S3_REGION: us-east-1
         VAULT_KEY_VERSION: "1"
         ZCLI_BINARY: ./node_modules/.bin/zcli
-        ZEROPS_API_URL: https://api.app-prg1.zerops.io/api/rest/public
-        ZEROPS_EXECUTOR_SOURCE_DIRECTORY: /var/www
+        TRIALRUN_ZEROPS_API_URL: https://api.app-prg1.zerops.io/api/rest/public
+        TRIALRUN_ZEROPS_EXECUTOR_SOURCE_DIRECTORY: /var/www
       start: >-
         cd .deploy/runner &&
         ./node_modules/.bin/tsx node_modules/@trialrun/db/src/migrate.ts &&

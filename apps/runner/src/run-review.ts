@@ -88,13 +88,16 @@ function executionProvider(): ExecutionProvider {
   if (runnerConfig.EXECUTION_PROVIDER === "local") {
     return new LocalExecutionProvider();
   }
-  if (!runnerConfig.ZEROPS_ACCESS_TOKEN || !runnerConfig.ZEROPS_CLIENT_ID) {
+  if (
+    !runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN ||
+    !runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID
+  ) {
     throw new Error("Zerops provider credentials were not validated.");
   }
   return new ZeropsExecutionProvider({
-    apiUrl: runnerConfig.ZEROPS_API_URL,
-    accessToken: runnerConfig.ZEROPS_ACCESS_TOKEN,
-    clientId: runnerConfig.ZEROPS_CLIENT_ID,
+    apiUrl: runnerConfig.TRIALRUN_ZEROPS_API_URL,
+    accessToken: runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN,
+    clientId: runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID,
     executorSourceDirectory: executorSourceDirectory(),
     zcliBinary: runnerConfig.ZCLI_BINARY,
     timeoutMs: runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS * 1_000,

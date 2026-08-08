@@ -157,8 +157,8 @@ async function main(): Promise<void> {
     SEED_USER_EMAIL: state.judgeEmail,
     SEED_USER_PASSWORD_HASH: state.judgePasswordHash,
     VAULT_KEY_BASE64: state.vaultKeyBase64,
-    ZEROPS_ACCESS_TOKEN: zeropsAccessToken,
-    ZEROPS_CLIENT_ID: clientId,
+    TRIALRUN_ZEROPS_ACCESS_TOKEN: zeropsAccessToken,
+    TRIALRUN_ZEROPS_CLIENT_ID: clientId,
   };
 
   await mkdir(liveDirectory, { recursive: true, mode: 0o700 });

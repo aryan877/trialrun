@@ -34,10 +34,13 @@ const configSchema = z
     GITHUB_CLIENT_SECRET: z.string().min(20).optional(),
     VAULT_KEY_BASE64: z.string().optional(),
     VAULT_KEY_VERSION: z.coerce.number().int().positive().default(1),
-    ZEROPS_API_URL: z.string().url().default("https://api.app-prg1.zerops.io/api/rest/public"),
-    ZEROPS_ACCESS_TOKEN: z.string().optional(),
-    ZEROPS_CLIENT_ID: z.string().optional(),
-    ZEROPS_EXECUTOR_SOURCE_DIRECTORY: z.string().default("."),
+    TRIALRUN_ZEROPS_API_URL: z
+      .string()
+      .url()
+      .default("https://api.app-prg1.zerops.io/api/rest/public"),
+    TRIALRUN_ZEROPS_ACCESS_TOKEN: z.string().optional(),
+    TRIALRUN_ZEROPS_CLIENT_ID: z.string().optional(),
+    TRIALRUN_ZEROPS_EXECUTOR_SOURCE_DIRECTORY: z.string().default("."),
     ZCLI_BINARY: z.string().min(1).default("zcli"),
     S3_ENDPOINT: z.string().url().optional(),
     S3_REGION: z.string().default("us-east-1"),
@@ -49,7 +52,7 @@ const configSchema = z
   .superRefine((value, context) => {
     if (
       value.EXECUTION_PROVIDER === "zerops" &&
-      (!value.ZEROPS_ACCESS_TOKEN || !value.ZEROPS_CLIENT_ID)
+      (!value.TRIALRUN_ZEROPS_ACCESS_TOKEN || !value.TRIALRUN_ZEROPS_CLIENT_ID)
     ) {
       context.addIssue({
         code: "custom",

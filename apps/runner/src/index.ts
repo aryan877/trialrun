@@ -44,19 +44,19 @@ const cleanupTimeoutMs = Math.max(
   ),
 );
 const cleanupPromise =
-  runnerConfig.ZEROPS_ACCESS_TOKEN && runnerConfig.ZEROPS_CLIENT_ID
+  runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN && runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID
     ? new ZeropsCleanupWorker({
         store: createDatabaseZeropsCleanupStore(connection.db),
         deleter: new ZeropsCleanupClient({
-          apiUrl: runnerConfig.ZEROPS_API_URL,
-          accessToken: runnerConfig.ZEROPS_ACCESS_TOKEN,
-          clientId: runnerConfig.ZEROPS_CLIENT_ID,
+          apiUrl: runnerConfig.TRIALRUN_ZEROPS_API_URL,
+          accessToken: runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN,
+          clientId: runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID,
           requestTimeoutMs: Math.min(30_000, cleanupTimeoutMs),
           operationTimeoutMs: cleanupTimeoutMs,
         }),
         claimantId: runnerConfig.RUNNER_ID,
         leaseSeconds: runnerConfig.RUNNER_LEASE_SECONDS,
-        redactionValues: [runnerConfig.ZEROPS_ACCESS_TOKEN],
+        redactionValues: [runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN],
         logError: (message) => process.stderr.write(`TrialRun cleanup worker: ${message}\n`),
       }).run(shutdownController.signal)
     : Promise.resolve();
