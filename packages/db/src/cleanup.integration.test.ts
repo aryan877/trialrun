@@ -138,6 +138,12 @@ beforeAll(async () => {
         setup: "app",
         port: 3000,
         healthPath: "/health",
+        build: {
+          base: "alpine/nodejs@24" as const,
+          buildCommands: ["npm ci", "npm run build"],
+          deployFiles: ["dist", "package.json"],
+        },
+        run: { start: "node dist/server.js" },
         testTarget: true,
         publicAccess: false,
         resources: {
@@ -152,6 +158,7 @@ beforeAll(async () => {
           {
             path: "zerops.yaml",
             lineStart: 1,
+            lineEnd: 1,
             summary: "Test setup.",
             confidence: "high" as const,
           },

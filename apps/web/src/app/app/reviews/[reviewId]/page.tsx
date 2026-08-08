@@ -31,9 +31,13 @@ import {
 import { productAuth } from "@/components/product-auth";
 import {
   ArtifactLedger,
+  BrowserRecordingEvidence,
   MatchedEvidence,
-  pairScreenshotArtifacts,
 } from "@/components/review-evidence";
+import {
+  pairBrowserRecordingArtifacts,
+  pairScreenshotArtifacts,
+} from "@/components/review-evidence-pairing";
 import {
   Definition,
   EmptyState,
@@ -236,6 +240,8 @@ export default async function ReviewDetail({
   const hasOlderEvents = eventRows.length > 100;
   const nextEventCursor = visibleEventsDescending.at(-1)?.id;
   const screenshotPairs = pairScreenshotArtifacts(artifactRows);
+  const recordingPairs = pairBrowserRecordingArtifacts(artifactRows);
+  const liveEvidenceSealed = artifactRows.some((artifact) => artifact.kind === "live_evidence");
   const job = jobRows[0];
   const proof = owned.review.teardownProof;
   const proofDeleted = proof?.deleted === true;
@@ -441,6 +447,15 @@ export default async function ReviewDetail({
               title="Live mission has not started"
             />
           )}
+        </section>
+
+        <section className="space-y-4" aria-labelledby="browser-recordings">
+          <SectionHeading
+            description="The pull request recording is the primary behavior proof. Its matching base recording sits beside it on wide screens and below it on smaller screens. Both stream from the existing owner-scoped artifact route."
+            id="browser-recordings"
+            title="Recorded browser proof"
+          />
+          <BrowserRecordingEvidence evidenceSealed={liveEvidenceSealed} pairs={recordingPairs} />
         </section>
 
         <section className="space-y-4" aria-labelledby="matched-captures">

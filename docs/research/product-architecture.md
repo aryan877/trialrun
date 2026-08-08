@@ -12,7 +12,7 @@ The judgeable happy path is:
 
 1. Sign in to TrialRun and install its GitHub App on one repository.
 2. TrialRun resolves the pull request's base and head SHAs through GitHub.
-3. A repository analyst proposes the smallest Zerops topology from bounded file evidence.
+3. A repository analyst explores the complete safe repository and proposes the smallest runnable Zerops topology with exact file/line evidence.
 4. Deterministic policy rejects unsafe or unsupported infrastructure.
 5. A maintainer confirms the first version of the recipe.
 6. A PostgreSQL worker creates exactly one disposable Zerops project.
@@ -134,7 +134,7 @@ Primary implementation references:
 
 ## Repository recipe contract
 
-The evidence collector reads only allowlisted, bounded files and never follows symlinks outside the checkout. It may inspect root/workspace package manifests and lockfiles, `zerops.yaml`, `trialrun.yaml`, Docker/Compose manifests, language dependency manifests, ORM configuration, and example environment-variable names. It never reads `.env` values, credential stores, Git history outside the two verified commits, or arbitrary large files.
+The analyst receives bounded read-only tools over the complete safe checkout: paginated tree listing, literal search, and exact line reads. It chooses which repository files matter; TrialRun does not hardcode a manifest list. The repository view never exposes `.env` values, credential stores, generated dependency trees, binaries, unsafe symlinks, Git history outside the verified commits, or arbitrary large files. A customer `zerops.yaml` may be inspected as ordinary untrusted evidence but is never required, authoritative, patched, or deployed.
 
 The analyst output contains:
 
@@ -146,7 +146,7 @@ The analyst output contains:
 - a file/line or JSON-path citation and confidence for every inferred field;
 - unresolved questions that block confirmation.
 
-Policy limits the topology to supported types, a small service cap, non-HA disposable dependencies, private networking, bounded CPU/RAM/disk, safe relative paths, no arbitrary public port, and a readiness rule for every application service. The confirmed recipe is immutable and versioned. A material manifest/topology change proposes a successor and blocks automatic review until a maintainer confirms it.
+The runner re-reads every cited path and exact line before policy evaluation. Policy limits the topology to supported types, a small service cap, non-HA disposable dependencies, private networking, bounded CPU/RAM/disk, safe source-root-relative build/deploy/run paths, no arbitrary public port, and a readiness rule for every application service. TrialRun generates a fresh review-only Zerops manifest from that approved plan. The confirmed recipe is immutable and versioned. A material topology or run-contract change proposes a successor and blocks automatic review until a maintainer confirms it.
 
 ## Queue, cancellation, and cleanup
 

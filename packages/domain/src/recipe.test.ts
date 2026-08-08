@@ -4,11 +4,12 @@ import {
   applyInfrastructurePolicy,
   compileZeropsReviewTopology,
   computePolicyApprovedRecipeFingerprint,
+  evidenceCitationSchema,
   infrastructureProposalSchema,
-  isAllowedRepositoryEvidencePath,
   managedServiceSourceProperties,
   policyApprovedRecipeSchema,
   supportedZeropsApplicationTypes,
+  supportedZeropsBuildTypes,
   supportedZeropsManagedTypes,
   supportedZeropsRuntimeTypes,
   type InfrastructureProposal,
@@ -37,6 +38,12 @@ function proposal(): InfrastructureProposal {
         setup: "app",
         port: 3000,
         healthPath: "/health",
+        build: {
+          base: "alpine/nodejs@24",
+          buildCommands: ["npm ci", "npm run build"],
+          deployFiles: ["dist", "package.json"],
+        },
+        run: { start: "node dist/server.js" },
         testTarget: true,
         publicAccess: false,
         resources: {
@@ -161,6 +168,26 @@ describe("repository infrastructure policy", () => {
       parsed.error.issues.some(({ path }) => path.join(".") === "applications.0.zeropsType"),
     ).toBe(true);
     expect(applyInfrastructurePolicy(dockerProposal).accepted).toBe(false);
+  });
+
+  it("separates official build bases from application runtime service types", () => {
+    expect(supportedZeropsBuildTypes).toEqual(
+      expect.arrayContaining([
+        "alpine@3.23",
+        "ubuntu@24.04",
+        "alpine/php@8.5",
+        "ubuntu/php@8.5",
+        "alpine/nodejs@24",
+      ]),
+    );
+    for (const runtimeOnlyType of [
+      "alpine/docker@26.1.5",
+      "alpine/nginx@1.22",
+      "ubuntu/static@1.0",
+      "alpine/php-apache@8.5+2.4",
+    ]) {
+      expect(supportedZeropsBuildTypes).not.toContain(runtimeOnlyType);
+    }
   });
 
   it("keeps an exact allowlist for every supported managed-service type", () => {
@@ -309,7 +336,7 @@ describe("repository infrastructure policy", () => {
     ).toThrow(/fingerprint/i);
   });
 
-  it("blocks public apps, unresolved topology, and citations outside the allowlist", () => {
+  it("blocks public apps and unresolved topology without rejecting safe code citations", () => {
     const value = proposal();
     value.applications[0] = { ...value.applications[0]!, publicAccess: true };
     value.unresolvedQuestions = ["Which service owns migrations?"];
@@ -324,9 +351,9 @@ describe("repository infrastructure policy", () => {
       expect.arrayContaining([
         "public_application",
         "unresolved_questions",
-        "unsupported_evidence",
       ]),
     );
+    expect(decision.errors.map(({ code }) => code)).not.toContain("unsupported_evidence");
   });
 
   it("rejects reviews that exceed aggregate CPU, RAM, disk, object-storage, or service ceilings", () => {
@@ -422,6 +449,14 @@ describe("repository infrastructure policy", () => {
         sourceProperty: "connectionString",
       },
     ]);
+    expect(topology.deployments.find(({ hostname }) => hostname === "headapp")).toMatchObject({
+      build: {
+        base: "alpine/nodejs@24",
+        buildCommands: ["npm ci", "npm run build"],
+        deployFiles: ["dist", "package.json"],
+      },
+      run: { base: "alpine/nodejs@24", start: "node dist/server.js" },
+    });
     expect(topology.services.find(({ hostname }) => hostname === "executor")?.type).toBe(
       "alpine/docker@26.1.5",
     );
@@ -432,10 +467,66 @@ describe("repository infrastructure policy", () => {
     ).toBe(true);
   });
 
-  it("accepts only bounded manifest evidence paths", () => {
-    expect(isAllowedRepositoryEvidencePath("apps/web/package.json")).toBe(true);
-    expect(isAllowedRepositoryEvidencePath("packages/db/prisma/schema.prisma")).toBe(true);
-    expect(isAllowedRepositoryEvidencePath("../.env")).toBe(false);
-    expect(isAllowedRepositoryEvidencePath("src/server.ts")).toBe(false);
+  it.each([
+    ["alpine@3.23", "alpine@3.23"],
+    ["ubuntu@24.04", "ubuntu@24.04"],
+    ["ubuntu@22.04", "ubuntu@22.04"],
+    ["alpine/php-apache@8.5+2.4", "alpine/php@8.5"],
+    ["ubuntu/php-nginx@8.5+1.28", "ubuntu/php@8.5"],
+    ["alpine/nginx@1.22", "alpine/nodejs@24"],
+    ["ubuntu/static@1.0", "ubuntu/nodejs@24"],
+  ] as const)(
+    "preserves official OS-qualified manifest bases for %s",
+    (zeropsType, buildBase) => {
+      const value = proposal();
+      value.applications[0] = {
+        ...value.applications[0]!,
+        zeropsType,
+        build: { ...value.applications[0]!.build, base: buildBase },
+      };
+      const decision = applyInfrastructurePolicy(value);
+      if (!decision.accepted) throw new Error(`Expected ${zeropsType} to pass policy.`);
+      const topology = compileZeropsReviewTopology(decision.recipe, {
+        reviewId: "5cfe8c2b-5d56-4c8d-94be-1f0b169ee365",
+        baseSha: "b".repeat(40),
+        headSha: "c".repeat(40),
+      });
+      const deployment = topology.deployments.find(({ side }) => side === "head");
+      if (!deployment || deployment.side === "executor") {
+        throw new Error(`Expected an application deployment for ${zeropsType}.`);
+      }
+      expect(deployment.build).toMatchObject({ base: buildBase });
+      expect(deployment.run).toMatchObject({ base: zeropsType });
+    },
+  );
+
+  it("requires exact file-and-line citations and rejects legacy pointers", () => {
+    expect(evidenceCitationSchema.safeParse(citation).success).toBe(true);
+    expect(evidenceCitationSchema.safeParse({ ...citation, lineEnd: undefined }).success).toBe(
+      false,
+    );
+    expect(
+      evidenceCitationSchema.safeParse({ ...citation, pointer: "/zerops/0/run" }).success,
+    ).toBe(false);
+    expect(evidenceCitationSchema.safeParse({ ...citation, path: "." }).success).toBe(false);
+    expect(evidenceCitationSchema.safeParse({ ...citation, lineStart: 21 }).success).toBe(false);
+  });
+
+  it("bounds the approved build and run plan", () => {
+    const duplicateDeployFiles = proposal();
+    duplicateDeployFiles.applications[0]!.build.deployFiles = ["dist", "dist"];
+    expect(infrastructureProposalSchema.safeParse(duplicateDeployFiles).success).toBe(false);
+
+    const escapingDeployFile = proposal();
+    escapingDeployFile.applications[0]!.build.deployFiles = ["../outside"];
+    expect(infrastructureProposalSchema.safeParse(escapingDeployFile).success).toBe(false);
+
+    const emptyStart = proposal();
+    emptyStart.applications[0]!.run.start = "   ";
+    expect(infrastructureProposalSchema.safeParse(emptyStart).success).toBe(false);
+
+    const mismatchedOperatingSystems = proposal();
+    mismatchedOperatingSystems.applications[0]!.build.base = "ubuntu/nodejs@24";
+    expect(infrastructureProposalSchema.safeParse(mismatchedOperatingSystems).success).toBe(false);
   });
 });

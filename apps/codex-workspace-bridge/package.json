@@ -1,0 +1,25 @@
+{
+  "name": "@trialrun/codex-workspace-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "artifact": "tsx scripts/build-artifact.ts",
+    "build": "tsc --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "start": "tsx src/index.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trialrun/agent-runtime": "workspace:*",
+    "tsx": "4.23.11",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.3",
+    "esbuild": "0.28.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

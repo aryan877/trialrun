@@ -44,6 +44,21 @@ const serverEnvSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     DATABASE_URL: z.string().url().default("postgres://trialrun:trialrun@127.0.0.1:55432/trialrun"),
     APP_URL: z.string().url().default("http://localhost:3000"),
+    RUNNER_REPOSITORY_MCP_URL: z
+      .url()
+      .refine((value) => {
+        const url = new URL(value);
+        return (
+          url.protocol === "http:" &&
+          ["127.0.0.1", "localhost", "runner"].includes(url.hostname) &&
+          url.pathname === "/mcp" &&
+          url.search === "" &&
+          url.hash === "" &&
+          url.username === "" &&
+          url.password === ""
+        );
+      }, "RUNNER_REPOSITORY_MCP_URL must point to the private runner MCP endpoint.")
+      .default("http://127.0.0.1:3001/mcp"),
     CSRF_SECRET_BASE64: z.string().optional(),
     VAULT_KEY_BASE64: z.string().optional(),
     VAULT_KEY_VERSION: z.coerce.number().int().positive().default(1),

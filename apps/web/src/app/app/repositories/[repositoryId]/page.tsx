@@ -60,14 +60,13 @@ function setupNotice(query: Record<string, string | string[] | undefined>): {
     return {
       tone: "info",
       message:
-        "Repository analysis is queued. The runner will inspect bounded repository evidence at the current default-branch SHA.",
+        "The setup check is queued. TrialRun will inspect this repository at the current default-branch commit.",
     };
   }
   if (firstValue(query.recipe) === "confirmed") {
     return {
       tone: "success",
-      message:
-        "The infrastructure recipe is confirmed and can now be used for pull request reviews.",
+      message: "The setup is approved and can now be used for pull request reviews.",
     };
   }
   if (firstValue(query.secret) === "updated") {
@@ -82,21 +81,21 @@ function setupNotice(query: Record<string, string | string[] | undefined>): {
     return {
       tone: "error",
       message:
-        "The secret change was rejected. Only names required by the confirmed recipe can be stored.",
+        "The secret change was rejected. Only names required by the approved setup can be stored.",
     };
   }
   if (error === "analysis") {
-    return { tone: "error", message: "Repository analysis could not be queued." };
+    return { tone: "error", message: "The setup check could not be queued." };
   }
   if (error === "confirmation") {
-    return { tone: "error", message: "The proposed recipe could not be confirmed." };
+    return { tone: "error", message: "The proposed setup could not be approved." };
   }
   return null;
 }
 
 function AnalysisState({ analysis }: { readonly analysis: RepositoryAnalysisJob | undefined }) {
   if (!analysis) {
-    return <StateBadge icon={CircleDashed}>Not analyzed</StateBadge>;
+    return <StateBadge icon={CircleDashed}>Not checked</StateBadge>;
   }
   if (analysis.status === "queued") {
     return (
@@ -108,14 +107,14 @@ function AnalysisState({ analysis }: { readonly analysis: RepositoryAnalysisJob 
   if (analysis.status === "running") {
     return (
       <StateBadge icon={Activity} tone="running">
-        Running
+        Checking
       </StateBadge>
     );
   }
   if (analysis.status === "succeeded") {
     return (
       <StateBadge icon={Check} tone="success">
-        Succeeded
+        Check complete
       </StateBadge>
     );
   }
@@ -128,26 +127,26 @@ function AnalysisState({ analysis }: { readonly analysis: RepositoryAnalysisJob 
 
 function RecipeState({ recipe }: { readonly recipe: RepositoryRecipe | undefined }) {
   if (!recipe) {
-    return <StateBadge icon={CircleDashed}>No recipe</StateBadge>;
+    return <StateBadge icon={CircleDashed}>No setup</StateBadge>;
   }
   if (recipe.status === "confirmed") {
     return (
       <StateBadge icon={ShieldCheck} tone="success">
-        Confirmed v{recipe.version}
+        Approved v{recipe.version}
       </StateBadge>
     );
   }
   if (recipe.status === "proposed") {
     return (
       <StateBadge icon={TriangleAlert} tone="warning">
-        Proposed v{recipe.version}
+        Ready to approve v{recipe.version}
       </StateBadge>
     );
   }
   if (recipe.status === "rejected") {
     return (
       <StateBadge icon={OctagonAlert} tone="failure">
-        Rejected v{recipe.version}
+        Needs changes v{recipe.version}
       </StateBadge>
     );
   }
@@ -187,7 +186,13 @@ function EvidenceList({ evidence }: { readonly evidence: readonly EvidenceCitati
   );
 }
 
-function ApplicationCard({ service }: { readonly service: ApplicationService }) {
+function ApplicationCard({
+  dependencies,
+  service,
+}: {
+  readonly dependencies: readonly ManagedDependency[];
+  readonly service: ApplicationService;
+}) {
   return (
     <article className="panel-surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -204,12 +209,48 @@ function ApplicationCard({ service }: { readonly service: ApplicationService }) 
         ) : null}
       </div>
       <dl className="mt-3">
-        <Definition term="Runtime">{service.zeropsType}</Definition>
-        <Definition term="Source / setup">
-          <code className="font-mono text-xs">{service.sourceRoot}</code> · {service.setup}
+        <Definition term="Folder">
+          <code className="font-mono text-xs">{service.sourceRoot}</code>
         </Definition>
-        <Definition term="Readiness path">
-          <code className="font-mono text-xs">{service.healthPath}</code>
+        <Definition term="Runtime">{service.zeropsType}</Definition>
+        <Definition term="Build commands">
+          {service.build.buildCommands.length > 0 ? (
+            <span className="flex flex-col gap-1">
+              {service.build.buildCommands.map((command, index) => (
+                <code className="break-all font-mono text-xs" key={`${index}-${command}`}>
+                  {command}
+                </code>
+              ))}
+            </span>
+          ) : (
+            "No build step"
+          )}
+        </Definition>
+        <Definition term="Start command">
+          <code className="break-all font-mono text-xs">{service.run.start}</code>
+        </Definition>
+        <Definition term="Port">
+          <code className="font-mono text-xs">{service.port}</code>
+        </Definition>
+        <Definition term="Health URL">
+          <span>
+            Each private deployment URL +{" "}
+            <code className="font-mono text-xs">{service.healthPath}</code>
+          </span>
+        </Definition>
+        <Definition term="Detected dependencies">
+          {dependencies.length > 0 ? (
+            <span className="flex flex-wrap gap-x-2 gap-y-1">
+              {dependencies.map((dependency) => (
+                <span key={dependency.name}>
+                  {dependency.name}{" "}
+                  <span className="text-muted-foreground">({dependency.zeropsType})</span>
+                </span>
+              ))}
+            </span>
+          ) : (
+            "None detected"
+          )}
         </Definition>
         <Definition term="Resource bounds">
           <ResourceSummary resources={service.resources} />
@@ -229,7 +270,7 @@ function DependencyCard({ service }: { readonly service: ManagedDependency }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-mono text-[10px] tracking-[0.08em] text-signal-warning uppercase">
-            Managed dependency
+            Detected dependency
           </p>
           <h3 className="mt-1 truncate text-base leading-6 font-medium">{service.name}</h3>
         </div>
@@ -237,7 +278,7 @@ function DependencyCard({ service }: { readonly service: ManagedDependency }) {
       </div>
       <p className="mt-3 text-sm leading-5 text-muted-foreground">{service.purpose}</p>
       <dl className="mt-3">
-        <Definition term="Service type">{service.zeropsType}</Definition>
+        <Definition term="Type">{service.zeropsType}</Definition>
         {service.resources ? (
           <Definition term="Resource bounds">
             <ResourceSummary resources={service.resources} />
@@ -379,14 +420,14 @@ export default async function RepositorySetup({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
-                  01 / Analyze
+                  01 / Check
                 </p>
-                <h2 className="mt-1 text-base font-medium">Repository evidence</h2>
+                <h2 className="mt-1 text-base font-medium">Setup check</h2>
               </div>
               <AnalysisState analysis={latestAnalysis} />
             </div>
             <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">
-              Reads bounded manifests and configuration at the current default-branch SHA.
+              Reads the app manifests and configuration at the current default-branch commit.
             </p>
             <form
               action={`/api/repositories/${source.repository.id}/analyze`}
@@ -401,10 +442,10 @@ export default async function RepositorySetup({
                 variant="outline"
               >
                 {analysisActive
-                  ? "Analysis in progress"
+                  ? "Checking setup"
                   : latestAnalysis
-                    ? "Run analysis again"
-                    : "Analyze repository"}
+                    ? "Run setup check again"
+                    : "Run setup check"}
               </Button>
             </form>
           </article>
@@ -413,14 +454,16 @@ export default async function RepositorySetup({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground uppercase">
-                  02 / Confirm
+                  02 / Approve
                 </p>
-                <h2 className="mt-1 text-base font-medium">Infrastructure recipe</h2>
+                <h2 className="mt-1 text-base font-medium">
+                  Review how TrialRun will run this repo
+                </h2>
               </div>
               <RecipeState recipe={latestRecipe} />
             </div>
             <p className="mt-3 min-h-10 text-xs leading-5 text-muted-foreground">
-              A maintainer confirms the policy-approved services before any pull request can run.
+              Check the detected apps, commands, ports, and dependencies before a review can run.
             </p>
             {proposedRecipe?.approvedRecipe ? (
               <form
@@ -430,7 +473,7 @@ export default async function RepositorySetup({
               >
                 <input name="csrf" type="hidden" value={auth.csrfToken} />
                 <Button className="h-9 w-full rounded-[2px]" type="submit">
-                  Confirm recipe v{proposedRecipe.version}
+                  Approve setup v{proposedRecipe.version}
                   <Check aria-hidden="true" data-icon="inline-end" />
                 </Button>
               </form>
@@ -441,7 +484,7 @@ export default async function RepositorySetup({
                 type="button"
                 variant="outline"
               >
-                No confirmable proposal
+                No setup ready to approve
               </Button>
             )}
           </article>
@@ -496,7 +539,7 @@ export default async function RepositorySetup({
 
         <section className="grid gap-4 md:grid-cols-2">
           <div className="panel-surface p-4">
-            <SectionHeading title="Latest analysis" />
+            <SectionHeading title="Latest setup check" />
             {latestAnalysis ? (
               <dl className="mt-3">
                 <Definition term="State">
@@ -522,25 +565,23 @@ export default async function RepositorySetup({
               </dl>
             ) : (
               <p className="mt-3 text-sm leading-5 text-muted-foreground">
-                No analysis job has been recorded.
+                No setup check has been recorded.
               </p>
             )}
           </div>
           <div className="panel-surface p-4">
-            <SectionHeading title="Review policy" />
+            <SectionHeading title="Review readiness" />
             <dl className="mt-3">
               <Definition term="Automatic reviews">
                 {source.repository.config.automaticReviews
                   ? "Enabled for ready pull requests"
                   : "Disabled; manual runs only"}
               </Definition>
-              <Definition term="Execution recipe">
-                {confirmedRecipe
-                  ? `Confirmed version ${confirmedRecipe.version}`
-                  : "No confirmed recipe"}
+              <Definition term="Approved setup">
+                {confirmedRecipe ? `Version ${confirmedRecipe.version}` : "No approved setup"}
               </Definition>
-              <Definition term="Provider isolation">
-                Base and PR receive separate stateful dependencies from the confirmed recipe.
+              <Definition term="Deployment isolation">
+                TrialRun gives the base and pull request separate private deployments and data.
               </Definition>
             </dl>
             <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
@@ -554,16 +595,20 @@ export default async function RepositorySetup({
           <SectionHeading
             description={
               latestRecipe
-                ? `Version ${latestRecipe.version}, derived from ${latestRecipe.sourceSha.slice(0, 8)}. Policy output and cited repository evidence are shown without modification.`
-                : "Run repository analysis to produce a typed infrastructure proposal."
+                ? `Version ${latestRecipe.version}, derived from ${latestRecipe.sourceSha.slice(0, 8)}. Detected settings and their repository evidence are shown below.`
+                : "Run a setup check to see how TrialRun will build and start this repository."
             }
             id="recipe"
-            title="Analysis and recipe"
+            title="How TrialRun will run this repo"
           />
+          <Notice tone="info">
+            TrialRun generates private base and pull request deployments from the approved setup.
+            You never need to add or maintain a Zerops configuration file.
+          </Notice>
           {!latestRecipe || !shownRecipe ? (
             <EmptyState
-              description="The bounded analyst has not produced an infrastructure proposal for this repository."
-              title="No recipe proposal"
+              description="Run the setup check to detect this repository's apps, commands, ports, and dependencies."
+              title="No setup proposal"
             />
           ) : (
             <div className="space-y-4">
@@ -585,9 +630,7 @@ export default async function RepositorySetup({
 
                 {latestRecipe.proposal.unresolvedQuestions.length > 0 ? (
                   <div className="mt-4 border-t border-border pt-4">
-                    <p className="text-xs font-medium text-signal-warning">
-                      Unresolved topology questions
-                    </p>
+                    <p className="text-xs font-medium text-signal-warning">Questions to resolve</p>
                     <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
                       {latestRecipe.proposal.unresolvedQuestions.map((question, index) => (
                         <li key={`${index}-${question}`}>{question}</li>
@@ -601,7 +644,7 @@ export default async function RepositorySetup({
                   <div className="mt-4 grid gap-3 border-t border-border pt-4 md:grid-cols-2">
                     {latestRecipe.policyDecision.errors.length > 0 ? (
                       <div>
-                        <p className="text-xs font-medium text-destructive">Policy blockers</p>
+                        <p className="text-xs font-medium text-destructive">Setup blockers</p>
                         <ul className="mt-2 space-y-2 text-xs leading-5 text-muted-foreground">
                           {latestRecipe.policyDecision.errors.map((issue, index) => (
                             <li key={`${issue.code}-${issue.path}-${index}`}>
@@ -617,7 +660,7 @@ export default async function RepositorySetup({
                     {latestRecipe.policyDecision.warnings.length > 0 ? (
                       <div>
                         <p className="text-xs font-medium text-signal-warning">
-                          Policy adjustments
+                          Safety adjustments
                         </p>
                         <ul className="mt-2 space-y-2 text-xs leading-5 text-muted-foreground">
                           {latestRecipe.policyDecision.warnings.map((issue, index) => (
@@ -635,7 +678,11 @@ export default async function RepositorySetup({
 
               <div className="grid gap-3 lg:grid-cols-2">
                 {shownRecipe.applications.map((service) => (
-                  <ApplicationCard key={`application-${service.name}`} service={service} />
+                  <ApplicationCard
+                    dependencies={shownRecipe.dependencies}
+                    key={`application-${service.name}`}
+                    service={service}
+                  />
                 ))}
                 {shownRecipe.dependencies.map((service) => (
                   <DependencyCard key={`dependency-${service.name}`} service={service} />
@@ -646,11 +693,11 @@ export default async function RepositorySetup({
                 <div className="panel-surface overflow-hidden">
                   <div className="flex h-11 items-center gap-2 border-b border-border px-3">
                     <GitBranch aria-hidden="true" className="size-4 text-signal-info" />
-                    <h3 className="text-sm font-medium">Service environment bindings</h3>
+                    <h3 className="text-sm font-medium">Connected app variables</h3>
                   </div>
                   {shownRecipe.environmentBindings.length === 0 ? (
                     <p className="px-3 py-5 text-sm text-muted-foreground">
-                      No service-derived variables were proposed.
+                      No dependency-provided variables were detected.
                     </p>
                   ) : (
                     <ul>
@@ -673,11 +720,11 @@ export default async function RepositorySetup({
                 <div className="panel-surface overflow-hidden">
                   <div className="flex h-11 items-center gap-2 border-b border-border px-3">
                     <KeyRound aria-hidden="true" className="size-4 text-signal-warning" />
-                    <h3 className="text-sm font-medium">Secret bindings</h3>
+                    <h3 className="text-sm font-medium">Required test secrets</h3>
                   </div>
                   {shownRecipe.secretBindings.length === 0 ? (
                     <p className="px-3 py-5 text-sm text-muted-foreground">
-                      This recipe does not require stored secrets.
+                      This setup does not require stored secrets.
                     </p>
                   ) : (
                     <ul>
@@ -702,7 +749,7 @@ export default async function RepositorySetup({
 
         <section className="space-y-4" aria-labelledby="secrets">
           <SectionHeading
-            description="Only names required by the confirmed recipe are accepted. Values are write-only in this interface."
+            description="Only names required by the approved setup are accepted. Values are write-only in this interface."
             id="secrets"
             title="Test-secret vault"
           />
@@ -715,10 +762,10 @@ export default async function RepositorySetup({
             <EmptyState
               description={
                 confirmedRecipe
-                  ? "The confirmed recipe has no test-secret bindings."
-                  : "Confirm a policy-approved recipe before storing any repository secret."
+                  ? "The approved setup has no test-secret bindings."
+                  : "Approve the proposed setup before storing any repository secret."
               }
-              title={confirmedRecipe ? "No secrets required" : "Secrets locked until confirmation"}
+              title={confirmedRecipe ? "No secrets required" : "Secrets locked until approval"}
             />
           ) : (
             <ul className="overflow-hidden rounded-[4px] border border-border">
@@ -805,8 +852,8 @@ export default async function RepositorySetup({
             <div className="space-y-3">
               <Notice tone="warning">
                 {unboundSecrets.length} encrypted secret record
-                {unboundSecrets.length === 1 ? " is" : "s are"} no longer bound by the confirmed
-                recipe. The existing secret API does not permit deleting an unbound name.
+                {unboundSecrets.length === 1 ? " is" : "s are"} no longer used by the approved
+                setup. The existing secret API does not permit deleting an unbound name.
               </Notice>
               <ul className="overflow-hidden rounded-[4px] border border-border">
                 {unboundSecrets.map((secret) => (
@@ -833,7 +880,7 @@ export default async function RepositorySetup({
           />
           {recentReviewRows.length === 0 ? (
             <EmptyState
-              description="Queue an open pull request above after the recipe and required secrets are ready."
+              description="Queue an open pull request above after the setup is approved and required secrets are ready."
               title="No repository reviews yet"
             />
           ) : (
@@ -873,7 +920,7 @@ export default async function RepositorySetup({
 
         {recipeRows.length > 1 ? (
           <section className="space-y-4" aria-labelledby="versions">
-            <SectionHeading id="versions" title="Recipe versions" />
+            <SectionHeading id="versions" title="Setup versions" />
             <ul className="overflow-hidden rounded-[4px] border border-border">
               {recipeRows.map((recipe) => (
                 <li

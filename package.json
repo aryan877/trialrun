@@ -17,6 +17,9 @@
     "db:migrate": "pnpm --filter @trialrun/db migrate",
     "db:seed": "pnpm --filter @trialrun/db seed",
     "live:render-import": "tsx scripts/render-live-import.ts",
+    "web:artifact:linux": "tsx scripts/build-web-artifact.ts",
+    "web:artifact:verify": "tsx scripts/verify-web-artifact.ts",
+    "web:artifact:deploy": "tsx scripts/deploy-web-artifact.ts",
     "runner": "pnpm --filter @trialrun/runner start",
     "test:e2e": "playwright test"
   },

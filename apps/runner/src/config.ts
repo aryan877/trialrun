@@ -29,6 +29,9 @@ const configSchema = z
     CODEX_REASONING_EFFORT: z.enum(["low", "medium"]).default("medium"),
     MANAGED_OPENAI_API_KEY: z.string().min(20).optional(),
     MANAGED_CODEX_HOME: z.string().min(1).optional(),
+    REPOSITORY_MCP_BIND_HOST: z.enum(["127.0.0.1", "0.0.0.0"]).default("127.0.0.1"),
+    REPOSITORY_MCP_PORT: z.coerce.number().int().min(0).max(65_535).default(0),
+    REPOSITORY_MCP_PUBLIC_URL: z.string().url().optional(),
     APP_URL: z.string().url().default("http://localhost:3000"),
     GITHUB_APP_ID: z.coerce.number().int().positive().safe().optional(),
     GITHUB_PRIVATE_KEY_BASE64: z.string().min(100).optional(),
@@ -42,7 +45,22 @@ const configSchema = z
       .default("https://api.app-prg1.zerops.io/api/rest/public"),
     TRIALRUN_ZEROPS_ACCESS_TOKEN: z.string().optional(),
     TRIALRUN_ZEROPS_CLIENT_ID: z.string().optional(),
-    TRIALRUN_ZEROPS_EXECUTOR_SOURCE_DIRECTORY: z.string().default("."),
+    TRIALRUN_ZEROPS_EXECUTOR_SOURCE_DIRECTORY: z
+      .string()
+      .trim()
+      .min(
+        1,
+        "TRIALRUN_ZEROPS_EXECUTOR_SOURCE_DIRECTORY must identify the deployed executor bundle.",
+      )
+      .max(4_096)
+      .default("."),
+    TRIALRUN_CODEX_WORKSPACE_SOURCE_DIRECTORY: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4_096)
+      .default(".deploy/codex-workspace-source"),
+    TRIALRUN_BRIDGE_SIGNING_PRIVATE_KEY_BASE64: z.string().min(64).optional(),
     ZCLI_BINARY: z.string().min(1).default("zcli"),
     S3_ENDPOINT: z.string().url().optional(),
     S3_REGION: z.string().default("us-east-1"),
@@ -61,6 +79,18 @@ const configSchema = z
         message: "Zerops mode requires an access token and client ID.",
       });
     }
+    if (
+      value.EXECUTION_PROVIDER === "zerops" &&
+      (!value.TRIALRUN_BRIDGE_SIGNING_PRIVATE_KEY_BASE64 ||
+        !value.VAULT_KEY_BASE64 ||
+        !value.REPOSITORY_MCP_PUBLIC_URL)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Zerops mode requires the workspace bridge signing key, vault key, and public repository tool URL.",
+      });
+    }
     if (Boolean(value.GITHUB_APP_ID) !== Boolean(value.GITHUB_PRIVATE_KEY_BASE64)) {
       context.addIssue({ code: "custom", message: "GitHub App ID and private key must be configured together." });
     }
@@ -69,6 +99,15 @@ const configSchema = z
       (!value.S3_ACCESS_KEY_ID || !value.S3_SECRET_ACCESS_KEY)
     ) {
       context.addIssue({ code: "custom", message: "S3 mode requires access key credentials." });
+    }
+    if (
+      value.REPOSITORY_MCP_PUBLIC_URL &&
+      (value.REPOSITORY_MCP_BIND_HOST !== "0.0.0.0" || value.REPOSITORY_MCP_PORT === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A public repository MCP proxy requires a fixed private 0.0.0.0 listener.",
+      });
     }
   });
 

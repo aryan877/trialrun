@@ -21,6 +21,7 @@ export const liveBrowserErrorCodeSchema = z.enum([
 const sideSchema = z.enum(["base", "head"]);
 const evidenceIdSchema = z.string().min(1).max(160);
 const timestampSchema = z.string().datetime({ offset: true });
+const maximumRecordingArtifactBytes = 64 * 1_024 * 1_024;
 
 export const liveBrowserStatusSchema = z.strictObject({
   state: z.enum(["active", "cancelled", "finished", "timed_out"]),
@@ -99,7 +100,10 @@ const liveAssertionRecordSchema = z.strictObject({
 
 const liveCheckpointRecordSchema = z
   .strictObject({
-    artifactId: z.string().regex(/^artifact:[0-9a-f]{64}$/).optional(),
+    artifactId: z
+      .string()
+      .regex(/^artifact:[0-9a-f]{64}$/)
+      .optional(),
     name: z
       .string()
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -108,8 +112,16 @@ const liveCheckpointRecordSchema = z
     stateVersion: z.number().int().nonnegative().max(1_000_000),
     path: z.string().max(2_000),
     captured: z.boolean(),
-    digest: z.string().regex(/^[0-9a-f]{64}$/).optional(),
-    byteSize: z.number().int().positive().max(128 * 1_024 * 1_024).optional(),
+    digest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+    byteSize: z
+      .number()
+      .int()
+      .positive()
+      .max(128 * 1_024 * 1_024)
+      .optional(),
     mediaType: z.literal("image/png").optional(),
     createdAt: timestampSchema,
   })
@@ -123,7 +135,37 @@ const liveCheckpointRecordSchema = z
     if (checkpoint.captured !== metadata.every((value) => value !== undefined)) {
       context.addIssue({
         code: "custom",
-        message: "Captured checkpoints require a complete artifact manifest; withheld checkpoints require none.",
+        message:
+          "Captured checkpoints require a complete artifact manifest; withheld checkpoints require none.",
+      });
+    }
+  });
+
+const liveRecordingArtifactRecordSchema = z
+  .strictObject({
+    artifactId: z
+      .string()
+      .regex(/^artifact:[0-9a-f]{64}$/)
+      .optional(),
+    side: sideSchema,
+    captured: z.boolean(),
+    digest: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .optional(),
+    byteSize: z.number().int().positive().max(maximumRecordingArtifactBytes).optional(),
+    mediaType: z.literal("video/webm").optional(),
+    createdAt: timestampSchema,
+  })
+  .superRefine((recording, context) => {
+    const metadataKeys = ["artifactId", "digest", "byteSize", "mediaType"] as const;
+    const metadataComplete = metadataKeys.every((key) => recording[key] !== undefined);
+    const metadataPresent = metadataKeys.some((key) => Object.hasOwn(recording, key));
+    if ((recording.captured && !metadataComplete) || (!recording.captured && metadataPresent)) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Captured recordings require a complete artifact manifest; withheld recordings require none.",
       });
     }
   });
@@ -157,6 +199,7 @@ export const liveBrowserEvidenceSchema: z.ZodType<LiveBrowserEvidence> = z
           .max(80),
       )
       .max(100),
+    recordings: z.array(liveRecordingArtifactRecordSchema).max(2),
     events: z.array(liveBrowserEventSchema).max(10_000),
   })
   .superRefine((evidence, context) => {
@@ -190,7 +233,10 @@ export const liveBrowserEvidenceSchema: z.ZodType<LiveBrowserEvidence> = z
     ): void => {
       const head = new Set(headNames);
       const expected = [...new Set(baseNames.filter((name) => head.has(name)))].sort();
-      if (supplied.length !== expected.length || supplied.some((name, index) => name !== expected[index])) {
+      if (
+        supplied.length !== expected.length ||
+        supplied.some((name, index) => name !== expected[index])
+      ) {
         context.addIssue({
           code: "custom",
           path: [path],
@@ -199,10 +245,26 @@ export const liveBrowserEvidenceSchema: z.ZodType<LiveBrowserEvidence> = z
       }
     };
 
-    requireUnique(evidence.ledger.map(({ id }) => id), ["ledger"], "Ledger IDs");
-    requireIncreasing(evidence.ledger.map(({ sequence }) => sequence), ["ledger"], "Ledger sequences");
-    requireUnique(evidence.observations.map(({ id }) => id), ["observations"], "Observation IDs");
-    requireUnique(evidence.assertions.map(({ id }) => id), ["assertions"], "Assertion IDs");
+    requireUnique(
+      evidence.ledger.map(({ id }) => id),
+      ["ledger"],
+      "Ledger IDs",
+    );
+    requireIncreasing(
+      evidence.ledger.map(({ sequence }) => sequence),
+      ["ledger"],
+      "Ledger sequences",
+    );
+    requireUnique(
+      evidence.observations.map(({ id }) => id),
+      ["observations"],
+      "Observation IDs",
+    );
+    requireUnique(
+      evidence.assertions.map(({ id }) => id),
+      ["assertions"],
+      "Assertion IDs",
+    );
     requireUnique(
       evidence.assertions.map(({ name, side }) => `${side}:${name}`),
       ["assertions"],
@@ -223,8 +285,45 @@ export const liveBrowserEvidenceSchema: z.ZodType<LiveBrowserEvidence> = z
       ["checkpoints"],
       "Checkpoint artifact IDs",
     );
-    requireUnique(evidence.events.map(({ id }) => id), ["events"], "Browser event IDs");
-    requireIncreasing(evidence.events.map(({ sequence }) => sequence), ["events"], "Event sequences");
+    requireUnique(
+      evidence.recordings.map(({ side }) => side),
+      ["recordings"],
+      "Recording sides",
+    );
+    requireUnique(
+      [
+        ...evidence.checkpoints.flatMap(({ artifactId }) => (artifactId ? [artifactId] : [])),
+        ...evidence.recordings.flatMap(({ artifactId }) => (artifactId ? [artifactId] : [])),
+      ],
+      ["recordings"],
+      "Artifact IDs",
+    );
+    const sealed = evidence.ledger.some(({ tool }) => tool === "finish_review");
+    const recordingSides = evidence.recordings.map(({ side }) => side);
+    if (
+      (sealed &&
+        (recordingSides.length !== 2 ||
+          recordingSides[0] !== "base" ||
+          recordingSides[1] !== "head")) ||
+      (!sealed && recordingSides.length !== 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["recordings"],
+        message:
+          "Recordings must be empty before seal and contain exactly one base and head record after seal.",
+      });
+    }
+    requireUnique(
+      evidence.events.map(({ id }) => id),
+      ["events"],
+      "Browser event IDs",
+    );
+    requireIncreasing(
+      evidence.events.map(({ sequence }) => sequence),
+      ["events"],
+      "Event sequences",
+    );
     exactIntersection(
       evidence.matchedAssertionNames,
       evidence.assertions.filter(({ side }) => side === "base").map(({ name }) => name),

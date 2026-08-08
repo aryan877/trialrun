@@ -12,6 +12,7 @@ Nothing in this file is authorization to remove or rotate anything yet. Every en
 ## Local-machine and development-only references
 
 - [ ] `REMOVE-BEFORE-PUBLIC` Replace absolute `/Users/aryankumar/...` research paths in `AGENTS.md` and `docs/research/*` with repository-relative instructions or public source URLs.
+- [ ] `REMOVE-BEFORE-PUBLIC` Replace the personal `Aryan Kumar` display-name placeholder in `apps/web/src/app/login/page.tsx` with neutral product copy after the private judge account flow is frozen.
 - [ ] `REMOVE-BEFORE-PUBLIC` Delete ignored `.data/tasks/` OpenCode/DeepSeek packets and reports after every accepted finding is represented by code, tests, or a durable decision record.
 - [ ] `REMOVE-BEFORE-PUBLIC` Remove Keychain service names, local private-key locations, local ports, and machine-specific operational notes from the public handoff; keep a separate private deployment runbook if required.
 - [ ] `REMOVE-BEFORE-PUBLIC` Decide whether the internal `docs/TASKS.md` and live-delivery section of `AGENTS.md` should be archived or reduced before judge/source access.

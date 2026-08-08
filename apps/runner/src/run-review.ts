@@ -5,7 +5,6 @@ import { isAbsolute, join, resolve } from "node:path";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import {
-  agentConnections,
   appendReviewEvent,
   artifacts,
   findings,
@@ -46,22 +45,26 @@ import {
 } from "@trialrun/executor";
 
 import { runnerConfig, workspaceRoot } from "./config";
-import { CodexLiveAgent, type LiveAgentLifecycleEvent, type LiveAgentRunResult } from "./live-agent";
+import { loadAgentAccess, workspaceBridgeClient } from "./agent-access.js";
+import { assertReviewProviderMatchesRunner } from "./executor-source-preflight";
+import {
+  CodexLiveAgent,
+  type LiveAgentLifecycleEvent,
+  type LiveAgentRunResult,
+} from "./live-agent";
 import { decideLiveVerdict, validateAgentHandoff } from "./live-oracle";
 import { startRepositoryMcpServer, type RepositoryMcpServer } from "./repository-mcp";
 import { createRepositoryView } from "./repository-view";
-import { executorSourceDirectory, githubService } from "./services";
+import {
+  executorSourceDirectory,
+  githubService,
+  remoteRepositoryMcpNetwork,
+  repositoryMcpUrl,
+} from "./services";
 
 interface ExpectedArtifactIntegrity {
   readonly sha256: string;
   readonly sizeBytes: number;
-}
-
-interface AgentAccess {
-  readonly connectionId: string | null;
-  readonly mode: "managed" | "api_key";
-  readonly apiKey?: string;
-  readonly codexHome?: string;
 }
 
 function artifactStore(): ArtifactStore {
@@ -88,10 +91,7 @@ function executionProvider(): ExecutionProvider {
   if (runnerConfig.EXECUTION_PROVIDER === "local") {
     return new LocalExecutionProvider();
   }
-  if (
-    !runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN ||
-    !runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID
-  ) {
+  if (!runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN || !runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID) {
     throw new Error("Zerops provider credentials were not validated.");
   }
   return new ZeropsExecutionProvider({
@@ -124,10 +124,7 @@ async function persistFile(
   expected?: ExpectedArtifactIntegrity,
 ): Promise<void> {
   const stored = await store.putFile(reviewId, path, label, mediaType(path));
-  if (
-    expected &&
-    (stored.sha256 !== expected.sha256 || stored.sizeBytes !== expected.sizeBytes)
-  ) {
+  if (expected && (stored.sha256 !== expected.sha256 || stored.sizeBytes !== expected.sizeBytes)) {
     throw new Error(`Persisted artifact ${label} did not match its sealed evidence manifest.`);
   }
   await db.insert(artifacts).values({
@@ -170,7 +167,12 @@ async function persistLiveEvidence(input: {
     .where(
       and(
         eq(artifacts.reviewId, input.reviewId),
-        inArray(artifacts.kind, ["live_evidence", "screenshot", "application_log"]),
+        inArray(artifacts.kind, [
+          "live_evidence",
+          "screenshot",
+          "browser_recording",
+          "application_log",
+        ]),
       ),
     );
 
@@ -192,6 +194,7 @@ async function persistLiveEvidence(input: {
       assertionCount: input.evidence.assertions.length,
       checkpointCount: input.evidence.checkpoints.length,
       eventCount: input.evidence.events.length,
+      recordingCount: input.evidence.recordings.filter(({ captured }) => captured).length,
     },
   );
 
@@ -228,6 +231,38 @@ async function persistLiveEvidence(input: {
         stateVersion: checkpoint.stateVersion,
       },
       { sha256: checkpoint.digest, sizeBytes: checkpoint.byteSize },
+    );
+  }
+
+  for (const recording of input.evidence.recordings) {
+    if (
+      !recording.captured ||
+      !recording.artifactId ||
+      !recording.digest ||
+      recording.byteSize === undefined
+    ) {
+      continue;
+    }
+    const bytes = await input.environment.readLiveArtifact(recording.artifactId);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    if (digest !== recording.digest || bytes.byteLength !== recording.byteSize) {
+      throw new Error(`${recording.side} browser recording did not match sealed evidence.`);
+    }
+    const recordingPath = join(input.scratch, `${recording.side}-browser-review.webm`);
+    await writeFile(recordingPath, bytes, { mode: 0o600 });
+    await persistFile(
+      input.db,
+      input.store,
+      input.reviewId,
+      recording.side,
+      "browser_recording",
+      `${recording.side}-browser-review`,
+      recordingPath,
+      {
+        artifactId: recording.artifactId,
+        createdAt: recording.createdAt,
+      },
+      { sha256: recording.digest, sizeBytes: recording.byteSize },
     );
   }
 
@@ -291,7 +326,9 @@ async function loadTestSecrets(
   const names = [...new Set(recipe.secretBindings.map(({ secretName }) => secretName))];
   if (names.length === 0) return {};
   if (!runnerConfig.VAULT_KEY_BASE64) {
-    throw new Error("Repository test secrets are required but the runner vault key is unavailable.");
+    throw new Error(
+      "Repository test secrets are required but the runner vault key is unavailable.",
+    );
   }
   const key = decodeBase64Key(runnerConfig.VAULT_KEY_BASE64, "VAULT_KEY_BASE64");
   const records = await db
@@ -316,76 +353,6 @@ async function loadTestSecrets(
   );
 }
 
-function managedAgentAccess(connectionId: string | null): AgentAccess {
-  if (runnerConfig.MANAGED_CODEX_HOME) {
-    return {
-      connectionId,
-      mode: "managed",
-      codexHome: resolve(runnerConfig.MANAGED_CODEX_HOME),
-    };
-  }
-  if (runnerConfig.MANAGED_OPENAI_API_KEY) {
-    return {
-      connectionId,
-      mode: "managed",
-      apiKey: runnerConfig.MANAGED_OPENAI_API_KEY,
-    };
-  }
-  throw new Error("Managed Codex is not configured with an API key or authenticated Codex home.");
-}
-
-async function loadAgentAccess(
-  db: TrialRunDatabase,
-  review: Review,
-): Promise<AgentAccess> {
-  const [connection] = await db
-    .select()
-    .from(agentConnections)
-    .where(
-      and(
-        eq(agentConnections.userId, review.ownerUserId),
-        eq(agentConnections.provider, "openai"),
-        eq(agentConnections.status, "connected"),
-        ...(review.agentConnectionId
-          ? [eq(agentConnections.id, review.agentConnectionId)]
-          : []),
-      ),
-    )
-    .limit(1);
-
-  if (!connection) return managedAgentAccess(null);
-  if (connection.mode === "managed") return managedAgentAccess(connection.id);
-  if (connection.mode === "codex_workspace") {
-    throw new Error(
-      "This review selected a Codex subscription workspace, but its authenticated Zerops bridge is not connected.",
-    );
-  }
-  if (
-    !runnerConfig.VAULT_KEY_BASE64 ||
-    connection.keyVersion !== runnerConfig.VAULT_KEY_VERSION ||
-    !connection.iv ||
-    !connection.ciphertext ||
-    !connection.authTag
-  ) {
-    throw new Error("The selected user API key cannot be decrypted with the active vault key.");
-  }
-  const key = decodeBase64Key(runnerConfig.VAULT_KEY_BASE64, "VAULT_KEY_BASE64");
-  return {
-    connectionId: connection.id,
-    mode: "api_key",
-    apiKey: decryptSecret(
-      {
-        keyVersion: connection.keyVersion,
-        iv: connection.iv,
-        ciphertext: connection.ciphertext,
-        authTag: connection.authTag,
-      },
-      key,
-      `trialrun:agent-connection:${connection.userId}:${connection.id}`,
-    ),
-  };
-}
-
 function createMission(input: {
   readonly review: Review;
   readonly pullRequestTitle: string;
@@ -402,27 +369,39 @@ function createMission(input: {
       {
         id: "understand-change",
         kind: "understand_change",
-        objective: "Understand the PR, its surrounding code, callers, configuration, and existing tests.",
+        objective:
+          "Understand the PR, its surrounding code, callers, configuration, and existing tests.",
         priority: "high",
       },
       {
         id: "review-code-risks",
         kind: "review_code_risks",
-        objective: "Report exact cited strengths and concrete code risks without overstating unproven claims.",
+        objective:
+          "Report exact cited strengths and concrete code risks without overstating unproven claims.",
         priority: "high",
       },
       {
         id: "investigate-live-behavior",
         kind: "investigate_live_behavior",
-        objective: "Interactively compare the real base and PR applications and reproduce the highest-value behavioral differences.",
+        objective:
+          "Interactively compare the real base and PR applications and reproduce the highest-value behavioral differences.",
         priority: "high",
       },
     ],
     questions: [
       { id: "change-intent", question: "What behavior and code paths does this PR change?" },
-      { id: "code-quality", question: "What is implemented well and what concrete code risks remain?" },
-      { id: "runtime-difference", question: "Which behavior differs between base and PR under equivalent live actions?" },
-      { id: "release-confidence", question: "What does the recorded evidence support, and what remains untested?" },
+      {
+        id: "code-quality",
+        question: "What is implemented well and what concrete code risks remain?",
+      },
+      {
+        id: "runtime-difference",
+        question: "Which behavior differs between base and PR under equivalent live actions?",
+      },
+      {
+        id: "release-confidence",
+        question: "What does the recorded evidence support, and what remains untested?",
+      },
     ],
     allowedSecretNames: [...new Set(input.secretNames)].sort(),
     capabilities: [
@@ -439,10 +418,7 @@ function createMission(input: {
     ],
     budgets: {
       maxToolCalls: 200,
-      maxDurationSeconds: Math.max(
-        30,
-        Math.min(840, runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS - 30),
-      ),
+      maxDurationSeconds: Math.max(30, Math.min(840, runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS - 30)),
       maxCheckpoints: 12,
       maxResets: 4,
     },
@@ -499,6 +475,7 @@ export async function runReview(
   review: Review,
   signal?: AbortSignal,
 ): Promise<void> {
+  assertReviewProviderMatchesRunner(review.provider, runnerConfig.EXECUTION_PROVIDER);
   const provider = executionProvider();
   const store = artifactStore();
   if (
@@ -522,6 +499,7 @@ export async function runReview(
   let checkRunId = review.checkRunId;
   let source: Awaited<ReturnType<typeof reviewSource>> | null = null;
   let agentRun: LiveAgentRunResult | null = null;
+  let githubPublished = false;
 
   const rememberFailure = (error: unknown): Error => {
     const raw = error instanceof Error ? error.message : String(error);
@@ -604,8 +582,13 @@ export async function runReview(
     });
     const secrets = await loadTestSecrets(db, source.repository.id, source.recipe);
     secretValues.push(...Object.values(secrets));
-    const agentAccess = await loadAgentAccess(db, review);
-    if (agentAccess.apiKey) secretValues.push(agentAccess.apiKey);
+    const agentAccess = await loadAgentAccess(db, {
+      userId: review.ownerUserId,
+      connectionId: review.agentConnectionId,
+    });
+    if (agentAccess.mode !== "codex_workspace" && agentAccess.apiKey) {
+      secretValues.push(agentAccess.apiKey);
+    }
 
     const ownershipTokenHash = hashToken(randomToken());
     await db
@@ -671,41 +654,83 @@ export async function runReview(
       executionToken: repositoryToken,
       readApplicationLogs: async (side) =>
         boundedRedactedLogs(await provisionedEnvironment.readLogs(side), secretValues),
+      ...(agentAccess.mode === "codex_workspace" ? { network: remoteRepositoryMcpNetwork() } : {}),
     });
 
     await move("running", "Codex is inspecting the PR and controlling both live applications");
     signal?.throwIfAborted();
-    const rawAgentRun = await new CodexLiveAgent({
-      codexBinary: runnerConfig.CODEX_BINARY,
-      model: runnerConfig.CODEX_MODEL,
-      reasoningEffort: runnerConfig.CODEX_REASONING_EFFORT,
-    }).run({
-      mission,
-      repositoryContext: {
-        owner: source.repository.owner,
-        repository: source.repository.name,
-        pullNumber: review.pullNumber,
-        pullRequestTitle: pullRequest.title,
-        pullRequestBody: pullRequest.body,
-      },
-      repositoryTools: {
-        mcpUrl: repositoryMcp.mcpUrl,
-        bearerToken: repositoryToken,
-      },
-      liveTools: provisionedEnvironment.liveReview,
-      ...(agentAccess.apiKey ? { apiKey: agentAccess.apiKey } : {}),
-      ...(agentAccess.codexHome ? { codexHome: agentAccess.codexHome } : {}),
-      ...(signal ? { signal } : {}),
-      onEvent: async (event) => {
-        if (event.type === "thread.started") {
-          await db
-            .update(reviews)
-            .set({ agentThreadId: event.threadId })
-            .where(eq(reviews.id, review.id));
-        }
-        await safeEvent(`agent.${event.type}`, `Codex ${event.type.replace(".", " ")}`, eventPayload(event));
-      },
-    });
+    const repositoryTools = {
+      mcpUrl: repositoryMcpUrl(repositoryMcp, agentAccess.mode === "codex_workspace"),
+      bearerToken: repositoryToken,
+    };
+    const repositoryContext = {
+      owner: source.repository.owner,
+      repository: source.repository.name,
+      pullNumber: review.pullNumber,
+      pullRequestTitle: pullRequest.title,
+      pullRequestBody: pullRequest.body,
+    };
+    const rawAgentRun =
+      agentAccess.mode === "codex_workspace"
+        ? await workspaceBridgeClient(agentAccess)
+            .invoke(
+              {
+                kind: "review",
+                mission,
+                repositoryContext,
+                repositoryTools,
+                liveTools: provisionedEnvironment.liveReview,
+              },
+              mission.budgets.maxDurationSeconds * 1_000 + 30_000,
+              signal,
+            )
+            .then(async (result) => {
+              if (result.kind !== "review") {
+                throw new Error("Codex workspace returned an analysis result for a review job.");
+              }
+              for (const event of result.events) {
+                if (event.type === "thread.started") {
+                  await db
+                    .update(reviews)
+                    .set({ agentThreadId: event.threadId })
+                    .where(eq(reviews.id, review.id));
+                }
+                await safeEvent(
+                  `agent.${event.type}`,
+                  `Codex ${event.type.replace(".", " ")}`,
+                  eventPayload(event),
+                );
+              }
+              return result.run;
+            })
+        : await new CodexLiveAgent({
+            codexBinary: runnerConfig.CODEX_BINARY,
+            model: runnerConfig.CODEX_MODEL,
+            reasoningEffort: runnerConfig.CODEX_REASONING_EFFORT,
+          }).run({
+            mission,
+            repositoryContext,
+            repositoryTools,
+            liveTools: provisionedEnvironment.liveReview,
+            ...(agentAccess.apiKey ? { apiKey: agentAccess.apiKey } : {}),
+            ...(agentAccess.mode === "managed" && agentAccess.codexHome
+              ? { codexHome: agentAccess.codexHome }
+              : {}),
+            ...(signal ? { signal } : {}),
+            onEvent: async (event) => {
+              if (event.type === "thread.started") {
+                await db
+                  .update(reviews)
+                  .set({ agentThreadId: event.threadId })
+                  .where(eq(reviews.id, review.id));
+              }
+              await safeEvent(
+                `agent.${event.type}`,
+                `Codex ${event.type.replace(".", " ")}`,
+                eventPayload(event),
+              );
+            },
+          });
     agentRun = {
       ...rawAgentRun,
       report: redactAgentTerminalReport(rawAgentRun.report, secretValues),
@@ -815,9 +840,9 @@ export async function runReview(
 
   if (environment && !evidencePersisted) {
     try {
-      liveEvidence = liveEvidence ?? (workCompleted
-        ? await environment.sealLiveReview()
-        : await environment.cancelLiveReview());
+      liveEvidence =
+        liveEvidence ??
+        (workCompleted ? await environment.sealLiveReview() : await environment.cancelLiveReview());
       const [baseLogs, headLogs] = await Promise.all([
         environment.readLogs("base"),
         environment.readLogs("head"),
@@ -969,55 +994,71 @@ export async function runReview(
         finalVerdict = "inconclusive";
         await publishCheck();
       }
-    } catch (error) {
-      rememberFailure(error);
-      firstFailure = failures[0];
-      finalVerdict = "inconclusive";
-    }
-
-    try {
-      await github.createPullRequestComment(source.installation.githubInstallationId, {
-        owner: source.repository.owner,
-        repository: source.repository.name,
-        pullNumber: review.pullNumber,
-        body: [
-          `### TrialRun: ${finalVerdict}`,
-          "",
-          finalVerdict === "inconclusive"
-            ? (firstFailure?.message ?? comparisonSummary)
-            : comparisonSummary,
-          "",
-          agentRun
-            ? `Codex recorded **${agentRun.report.codeStrengths.length} strengths** and **${agentRun.report.codeRiskFindings.length} code risks** before the deterministic evidence oracle decided this result.`
-            : "The live Codex investigation did not finish with a validated report.",
-          "",
-          `[Matched evidence and teardown proof](${detailsUrl})`,
-        ].join("\n"),
+      const commentId = await github.createPullRequestComment(
+        source.installation.githubInstallationId,
+        {
+          owner: source.repository.owner,
+          repository: source.repository.name,
+          pullNumber: review.pullNumber,
+          body: [
+            `### TrialRun: ${finalVerdict}`,
+            "",
+            finalVerdict === "inconclusive"
+              ? (firstFailure?.message ?? comparisonSummary)
+              : comparisonSummary,
+            "",
+            agentRun
+              ? `Codex recorded **${agentRun.report.codeStrengths.length} strengths** and **${agentRun.report.codeRiskFindings.length} code risks** before the deterministic evidence oracle decided this result.`
+              : "The live Codex investigation did not finish with a validated report.",
+            "",
+            `[Matched evidence and teardown proof](${detailsUrl})`,
+          ].join("\n"),
+        },
+      );
+      await safeEvent("github.check_published", "GitHub Check completed", { checkRunId });
+      await safeEvent("github.comment_published", "Pull request comment published", {
+        commentId,
       });
       if (!cancellationObserved && signal?.aborted) {
         cancellationObserved = true;
         finalVerdict = "inconclusive";
         await publishCheck();
       }
+      githubPublished = true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "GitHub comment delivery failed.";
-      await safeEvent("github.comment_failed", redactText(message, secretValues));
+      const caught = rememberFailure(error);
+      firstFailure = failures[0];
+      finalVerdict = "inconclusive";
+      await safeEvent("github.publish_failed", caught.message);
+      try {
+        await publishCheck();
+      } catch (checkError) {
+        rememberFailure(checkError);
+      }
     }
   }
 
   cancellationObserved ||= signal?.aborted === true;
   if (cancellationObserved) {
     await db.update(reviews).set({ verdict: "inconclusive" }).where(eq(reviews.id, review.id));
-    if (status !== "cancelled") await move("cancelled", "Review cancelled after evidence preservation and cleanup");
+    if (status !== "cancelled")
+      await move("cancelled", "Review cancelled after evidence preservation and cleanup");
     return;
   }
-  if (failures[0] || finalVerdict === "inconclusive") {
+  if (failures[0] || finalVerdict === "inconclusive" || !githubPublished) {
     await db.update(reviews).set({ verdict: "inconclusive" }).where(eq(reviews.id, review.id));
     if (status !== "inconclusive") {
-      await move("inconclusive", failures[0]?.message ?? comparisonSummary);
+      await move(
+        "inconclusive",
+        failures[0]?.message ??
+          (githubPublished ? comparisonSummary : "GitHub publication was not fully verified."),
+      );
     }
     return;
   }
   await db.update(reviews).set({ verdict: finalVerdict }).where(eq(reviews.id, review.id));
-  await move("completed", "Evidence saved, GitHub published, and disposable environment deletion confirmed");
+  await move(
+    "completed",
+    "Evidence saved, GitHub published, and disposable environment deletion confirmed",
+  );
 }

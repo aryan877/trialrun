@@ -7,7 +7,7 @@ export * from "./live-browser";
 export * from "./live-protocol";
 export * from "./live-server";
 export * from "./planner";
-export * from "./repository-evidence";
 export * from "./types";
 export * from "./zerops-manifest";
 export * from "./zerops-provider";
+export * from "./zerops-schema";

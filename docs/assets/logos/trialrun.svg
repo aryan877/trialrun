@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="trialrun-logo-title">
+  <title id="trialrun-logo-title">TrialRun</title>
+  <rect x="4" y="8" width="56" height="48" rx="10" fill="#171717" />
+  <path d="M22 19h-7v26h7" fill="none" stroke="#fffdfa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M42 19h7v26h-7" fill="none" stroke="#fffdfa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M39 14 26 50" fill="none" stroke="#b9ff54" stroke-width="6" stroke-linecap="round" />
+</svg>

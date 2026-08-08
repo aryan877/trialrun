@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   redactText,
@@ -13,6 +16,7 @@ import {
   type BrowserContext,
   type Locator,
   type Page,
+  type Video,
 } from "playwright";
 
 import type { ReviewSide } from "./types";
@@ -73,6 +77,10 @@ const defaultBudgets: LiveBrowserBudgets = {
 
 const maximumStoredBrowserEvents = 10_000;
 
+// A side recording is optional evidence, not an unbounded session archive. This keeps
+// one 15-minute review from exhausting executor memory before durable persistence.
+export const maximumLiveBrowserRecordingArtifactBytes = 64 * 1_024 * 1_024;
+
 export interface LiveBrowserRawEvent {
   readonly kind: BrowserEvent["kind"];
   readonly level: BrowserEvent["level"];
@@ -95,6 +103,7 @@ export interface LiveBrowserSideController {
   isVisible(locator: TestLocator, signal: AbortSignal): Promise<boolean>;
   textContent(locator: TestLocator, signal: AbortSignal): Promise<string>;
   screenshot(signal: AbortSignal): Promise<Uint8Array>;
+  finishRecording(capture: boolean, maximumBytes: number): Promise<Uint8Array | undefined>;
   close(): Promise<void>;
 }
 
@@ -168,6 +177,16 @@ export interface LiveCheckpointRecord {
   readonly createdAt: string;
 }
 
+export interface LiveRecordingArtifactRecord {
+  readonly artifactId?: string | undefined;
+  readonly side: ReviewSide;
+  readonly captured: boolean;
+  readonly digest?: string | undefined;
+  readonly byteSize?: number | undefined;
+  readonly mediaType?: "video/webm" | undefined;
+  readonly createdAt: string;
+}
+
 export interface LiveBrowserEvent extends BrowserEvent {
   readonly id: string;
   readonly sequence: number;
@@ -229,6 +248,7 @@ export interface LiveBrowserEvidence {
   readonly matchedAssertionNames: readonly string[];
   readonly checkpoints: readonly LiveCheckpointRecord[];
   readonly matchedCheckpointNames: readonly string[];
+  readonly recordings: readonly LiveRecordingArtifactRecord[];
   readonly events: readonly LiveBrowserEvent[];
 }
 
@@ -237,6 +257,7 @@ interface SideState {
   version: number;
   observation?: LiveBrowserObservation;
   secretTainted: boolean;
+  recordingSecretTainted: boolean;
 }
 
 interface StoredArtifact {
@@ -244,7 +265,7 @@ interface StoredArtifact {
     readonly artifactId: string;
     readonly byteSize: number;
     readonly digest: string;
-    readonly mediaType: "image/png";
+    readonly mediaType: "image/png" | "video/webm";
   };
   readonly bytes: Uint8Array;
 }
@@ -271,7 +292,10 @@ function parseStep(candidate: unknown, action: "select"): SelectStep;
 function parseStep(candidate: unknown, action: "press"): PressStep;
 function parseStep(candidate: unknown, action: "assert"): AssertStep;
 function parseStep(candidate: unknown, action: "checkpoint"): CheckpointStep;
-function parseStep(candidate: unknown, action: LiveStepAction): Exclude<TestStep, { action: "request" }> {
+function parseStep(
+  candidate: unknown,
+  action: LiveStepAction,
+): Exclude<TestStep, { action: "request" }> {
   const parsed = testStepSchema.safeParse(candidate);
   if (!parsed.success || parsed.data.action === "request" || parsed.data.action !== action) {
     throw new LiveBrowserError("INVALID_INPUT", `Invalid ${action} input.`);
@@ -295,7 +319,10 @@ function relativePath(url: string, expectedOrigin: string): string {
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
-function boundedUtf8(value: string, maximumBytes: number): { readonly value: string; readonly truncated: boolean } {
+function boundedUtf8(
+  value: string,
+  maximumBytes: number,
+): { readonly value: string; readonly truncated: boolean } {
   const encoded = Buffer.from(value, "utf8");
   if (encoded.byteLength <= maximumBytes) return { value, truncated: false };
   const suffix = "\n[truncated]";
@@ -311,7 +338,10 @@ function boundedUtf8(value: string, maximumBytes: number): { readonly value: str
   }
   const contentLimit = Math.max(0, maximumBytes - suffixBytes);
   return {
-    value: `${encoded.subarray(0, contentLimit).toString("utf8").replace(/\uFFFD$/u, "")}${suffix}`,
+    value: `${encoded
+      .subarray(0, contentLimit)
+      .toString("utf8")
+      .replace(/\uFFFD$/u, "")}${suffix}`,
     truncated: true,
   };
 }
@@ -341,12 +371,24 @@ class PlaywrightSideController implements LiveBrowserSideController {
   readonly #context: BrowserContext;
   readonly #page: Page;
   readonly #origin: string;
-  #closed = false;
+  readonly #video: Video;
+  readonly #recordingDirectory: string;
+  #contextClosePromise?: Promise<void>;
+  #recordingPromise: Promise<Uint8Array | undefined> | undefined;
+  #recordingFinished = false;
 
-  constructor(context: BrowserContext, page: Page, origin: string) {
+  constructor(
+    context: BrowserContext,
+    page: Page,
+    origin: string,
+    video: Video,
+    recordingDirectory: string,
+  ) {
     this.#context = context;
     this.#page = page;
     this.#origin = origin;
+    this.#video = video;
+    this.#recordingDirectory = recordingDirectory;
   }
 
   currentUrl(): string {
@@ -442,10 +484,29 @@ class PlaywrightSideController implements LiveBrowserSideController {
     );
   }
 
+  async finishRecording(capture: boolean, maximumBytes: number): Promise<Uint8Array | undefined> {
+    if (this.#recordingFinished) return undefined;
+    const recordingPromise = (this.#recordingPromise ??= this.#finishRecording(
+      capture,
+      maximumBytes,
+    ));
+    try {
+      const bytes = await recordingPromise;
+      return bytes ? Uint8Array.from(bytes) : undefined;
+    } finally {
+      if (this.#recordingPromise === recordingPromise) {
+        this.#recordingFinished = true;
+        this.#recordingPromise = undefined;
+      }
+    }
+  }
+
   async close(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    await this.#context.close();
+    try {
+      await this.finishRecording(false, maximumLiveBrowserRecordingArtifactBytes);
+    } catch {
+      // Cleanup remains best-effort after a prior capture failure.
+    }
   }
 
   #assertSameOrigin(): void {
@@ -455,13 +516,50 @@ class PlaywrightSideController implements LiveBrowserSideController {
   async #run<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
     signal.throwIfAborted();
     const closeOnAbort = (): void => {
-      void this.close().catch(() => undefined);
+      // Closing the context interrupts Playwright without deciding whether its video is safe.
+      // Seal makes that decision after the in-flight tool has left the exclusive section.
+      void this.#closeContext().catch(() => undefined);
     };
     signal.addEventListener("abort", closeOnAbort, { once: true });
     try {
       return await operation();
     } finally {
       signal.removeEventListener("abort", closeOnAbort);
+    }
+  }
+
+  async #closeContext(): Promise<void> {
+    if (!this.#contextClosePromise) {
+      this.#contextClosePromise = this.#context.close();
+    }
+    await this.#contextClosePromise;
+  }
+
+  async #finishRecording(capture: boolean, maximumBytes: number): Promise<Uint8Array | undefined> {
+    try {
+      await this.#closeContext();
+      if (!capture) {
+        await this.#video.delete().catch(() => undefined);
+        return undefined;
+      }
+      const recordingPath = await this.#video.path();
+      const metadata = await stat(recordingPath);
+      if (metadata.size <= 0 || metadata.size > maximumBytes) {
+        throw new LiveBrowserError(
+          "ARTIFACT_LIMIT",
+          "Browser recording exceeds the per-side artifact limit.",
+        );
+      }
+      const bytes = await readFile(recordingPath);
+      if (bytes.byteLength !== metadata.size || bytes.byteLength > maximumBytes) {
+        throw new LiveBrowserError(
+          "ARTIFACT_LIMIT",
+          "Browser recording changed while enforcing the per-side artifact limit.",
+        );
+      }
+      return Uint8Array.from(bytes);
+    } finally {
+      await rm(this.#recordingDirectory, { recursive: true, force: true }).catch(() => undefined);
     }
   }
 }
@@ -485,63 +583,78 @@ class PlaywrightLiveBrowserRuntime implements LiveBrowserRuntime {
     onEvent: (event: LiveBrowserRawEvent) => void,
   ): Promise<LiveBrowserSideController> {
     if (this.#closed) throw new LiveBrowserError("SESSION_SEALED", "Browser runtime is closed.");
-    const context = await this.#browser.newContext({
-      viewport: { width: 1_440, height: 900 },
-      locale: "en-US",
-      timezoneId: "UTC",
-      colorScheme: "dark",
-      reducedMotion: "reduce",
-      serviceWorkers: "block",
-    });
-    const page = await context.newPage();
-    page.setDefaultTimeout(10_000);
-    page.setDefaultNavigationTimeout(20_000);
-    page.on("console", (message) => {
-      const type = message.type();
-      onEvent({
-        kind: "console",
-        level: type === "error" ? "error" : type === "warning" ? "warning" : "info",
-        message: message.text(),
-      });
-    });
-    page.on("pageerror", (error) => {
-      onEvent({ kind: "page_error", level: "error", message: error.message });
-    });
-    page.on("response", (response) => {
-      if (response.status() < 400) return;
-      onEvent({
-        kind: "http_error",
-        level: "error",
-        message: `${response.request().method()} returned HTTP ${response.status()}`,
-        url: response.url(),
-        status: response.status(),
-      });
-    });
-    page.on("requestfailed", (request) => {
-      onEvent({
-        kind: "request_failed",
-        level: "error",
-        message: request.failure()?.errorText ?? "Request failed",
-        url: request.url(),
-      });
-    });
-    const controller = new PlaywrightSideController(context, page, origin);
-    this.#controllers.add(controller);
+    const recordingDirectory = await mkdtemp(join(tmpdir(), "trialrun-live-browser-"));
+    let context: BrowserContext | undefined;
+    let controller: PlaywrightSideController | undefined;
     try {
+      context = await this.#browser.newContext({
+        viewport: { width: 1_440, height: 900 },
+        locale: "en-US",
+        timezoneId: "UTC",
+        colorScheme: "dark",
+        reducedMotion: "reduce",
+        serviceWorkers: "block",
+        recordVideo: { dir: recordingDirectory },
+      });
+      const page = await context.newPage();
+      const video = page.video();
+      if (!video) throw new Error("Playwright did not create the requested browser recording.");
+      controller = new PlaywrightSideController(context, page, origin, video, recordingDirectory);
+      page.setDefaultTimeout(10_000);
+      page.setDefaultNavigationTimeout(20_000);
+      page.on("console", (message) => {
+        const type = message.type();
+        onEvent({
+          kind: "console",
+          level: type === "error" ? "error" : type === "warning" ? "warning" : "info",
+          message: message.text(),
+        });
+      });
+      page.on("pageerror", (error) => {
+        onEvent({ kind: "page_error", level: "error", message: error.message });
+      });
+      page.on("response", (response) => {
+        if (response.status() < 400) return;
+        onEvent({
+          kind: "http_error",
+          level: "error",
+          message: `${response.request().method()} returned HTTP ${response.status()}`,
+          url: response.url(),
+          status: response.status(),
+        });
+      });
+      page.on("requestfailed", (request) => {
+        onEvent({
+          kind: "request_failed",
+          level: "error",
+          message: request.failure()?.errorText ?? "Request failed",
+          url: request.url(),
+        });
+      });
+      this.#controllers.add(controller);
       const initializationController = new AbortController();
       const timer = setTimeout(
         () => initializationController.abort(new Error("Initial browser navigation timed out.")),
         20_000,
       );
       try {
-        await controller.navigate(`${origin}/`, "domcontentloaded", initializationController.signal);
+        await controller.navigate(
+          `${origin}/`,
+          "domcontentloaded",
+          initializationController.signal,
+        );
       } finally {
         clearTimeout(timer);
       }
       return controller;
     } catch (error) {
-      this.#controllers.delete(controller);
-      await controller.close();
+      if (controller) {
+        this.#controllers.delete(controller);
+        await controller.close();
+      } else {
+        await context?.close().catch(() => undefined);
+        await rm(recordingDirectory, { recursive: true, force: true }).catch(() => undefined);
+      }
       throw error;
     }
   }
@@ -572,6 +685,7 @@ export class LiveBrowserSession {
   readonly #observations: Array<Omit<LiveBrowserObservation, "snapshot">> = [];
   readonly #assertions: LiveAssertionRecord[] = [];
   readonly #checkpoints: LiveCheckpointRecord[] = [];
+  readonly #recordings: LiveRecordingArtifactRecord[] = [];
   readonly #events: LiveBrowserEvent[] = [];
   readonly #eventCursors = new Map<string, { readonly side: ReviewSide; readonly index: number }>();
   readonly #artifacts = new Map<string, StoredArtifact>();
@@ -583,6 +697,7 @@ export class LiveBrowserSession {
   #lastTimestampMs = 0;
   #totalArtifactBytes = 0;
   #terminalState: LiveBrowserTerminalState = "active";
+  #artifactsSealed = false;
   #exclusiveTail: Promise<void> = Promise.resolve();
   #sealPromise?: Promise<LiveBrowserEvidence>;
 
@@ -612,11 +727,25 @@ export class LiveBrowserSession {
     const session = new LiveBrowserSession(options, origins, budgets, runtime);
     try {
       const [base, head] = await Promise.all([
-        runtime.createSide("base", origins.base, (event) => session.#recordBrowserEvent("base", event)),
-        runtime.createSide("head", origins.head, (event) => session.#recordBrowserEvent("head", event)),
+        runtime.createSide("base", origins.base, (event) =>
+          session.#recordBrowserEvent("base", event),
+        ),
+        runtime.createSide("head", origins.head, (event) =>
+          session.#recordBrowserEvent("head", event),
+        ),
       ]);
-      session.#sides.set("base", { controller: base, version: 0, secretTainted: false });
-      session.#sides.set("head", { controller: head, version: 0, secretTainted: false });
+      session.#sides.set("base", {
+        controller: base,
+        version: 0,
+        secretTainted: false,
+        recordingSecretTainted: false,
+      });
+      session.#sides.set("head", {
+        controller: head,
+        version: 0,
+        secretTainted: false,
+        recordingSecretTainted: false,
+      });
     } catch (error) {
       await runtime.close();
       throw error;
@@ -636,10 +765,7 @@ export class LiveBrowserSession {
       state: this.#terminalState,
       actionsUsed: this.#actionsUsed,
       actionsRemaining: Math.max(0, this.#budgets.maxActions - this.#actionsUsed),
-      checkpointsRemaining: Math.max(
-        0,
-        this.#budgets.maxCheckpoints - this.#checkpoints.length,
-      ),
+      checkpointsRemaining: Math.max(0, this.#budgets.maxCheckpoints - this.#checkpoints.length),
       resetsRemaining: Math.max(0, this.#budgets.maxResets - this.#resetsUsed),
       expiresAt: new Date(
         this.#expiresAtMs ?? this.#now().getTime() + this.#budgets.maxDurationMs,
@@ -653,16 +779,13 @@ export class LiveBrowserSession {
 
   evidence(): LiveBrowserEvidence {
     const baseAssertionNames = new Set(
-      this.#assertions
-        .filter((assertion) => assertion.side === "base")
-        .map(({ name }) => name),
+      this.#assertions.filter((assertion) => assertion.side === "base").map(({ name }) => name),
     );
     const matchedAssertionNames = [
       ...new Set(
         this.#assertions
           .filter(
-            (assertion) =>
-              assertion.side === "head" && baseAssertionNames.has(assertion.name),
+            (assertion) => assertion.side === "head" && baseAssertionNames.has(assertion.name),
           )
           .map(({ name }) => name),
       ),
@@ -690,62 +813,59 @@ export class LiveBrowserSession {
       matchedAssertionNames,
       checkpoints: this.#checkpoints.map((checkpoint) => ({ ...checkpoint })),
       matchedCheckpointNames,
+      recordings: this.#recordings.map((recording) => ({ ...recording })),
       events: this.#events.map((event) => ({ ...event })),
     };
   }
 
-  async observe(
-    input: { readonly side: ReviewSide; readonly signal?: AbortSignal },
-  ): Promise<LiveBrowserObservation> {
-    return this.#tool(
-      "browser_observe",
-      input.side,
-      {},
-      input.signal,
-      async ({ signal }) => {
-        const state = this.#side(input.side);
-        this.#safeCurrentPath(input.side, state.controller);
-        const [title, rawSnapshot] = await Promise.all([
-          state.controller.title(signal),
-          state.controller.accessibilitySnapshot(signal),
-        ]);
-        const path = this.#safeCurrentPath(input.side, state.controller);
-        const redactedTitle = this.#redact(title);
-        const redactedSnapshot = this.#redact(rawSnapshot);
-        if (redactedTitle !== title || redactedSnapshot !== rawSnapshot) {
-          state.secretTainted = true;
-        }
-        const snapshot = boundedUtf8(redactedSnapshot, this.#budgets.maxSnapshotBytes);
-        const observation: LiveBrowserObservation = {
-          id: this.#opaqueId("obs"),
-          side: input.side,
-          path,
-          title: boundedUtf8(redactedTitle, 512).value,
-          snapshot: snapshot.value,
-          snapshotTruncated: snapshot.truncated,
-          viewport: state.controller.viewport(),
-          stateVersion: state.version,
-          observedAt: this.#timestamp(),
-        };
-        state.observation = observation;
-        this.#observations.push({
-          id: observation.id,
-          side: observation.side,
-          path: observation.path,
-          title: observation.title,
-          snapshotTruncated: observation.snapshotTruncated,
-          viewport: observation.viewport,
-          stateVersion: observation.stateVersion,
-          observedAt: observation.observedAt,
-        });
-        return {
-          value: observation,
-          result: `observation ${observation.id}; snapshot sha256=${sha256(snapshot.value)}; ${Buffer.byteLength(snapshot.value)} bytes`,
-          observationId: observation.id,
-          stateVersion: state.version,
-        };
-      },
-    );
+  async observe(input: {
+    readonly side: ReviewSide;
+    readonly signal?: AbortSignal;
+  }): Promise<LiveBrowserObservation> {
+    return this.#tool("browser_observe", input.side, {}, input.signal, async ({ signal }) => {
+      const state = this.#side(input.side);
+      this.#safeCurrentPath(input.side, state.controller);
+      const [title, rawSnapshot] = await Promise.all([
+        state.controller.title(signal),
+        state.controller.accessibilitySnapshot(signal),
+      ]);
+      const path = this.#safeCurrentPath(input.side, state.controller);
+      const redactedTitle = this.#redact(title);
+      const redactedSnapshot = this.#redact(rawSnapshot);
+      if (redactedTitle !== title || redactedSnapshot !== rawSnapshot) {
+        state.secretTainted = true;
+        state.recordingSecretTainted = true;
+      }
+      const snapshot = boundedUtf8(redactedSnapshot, this.#budgets.maxSnapshotBytes);
+      const observation: LiveBrowserObservation = {
+        id: this.#opaqueId("obs"),
+        side: input.side,
+        path,
+        title: boundedUtf8(redactedTitle, 512).value,
+        snapshot: snapshot.value,
+        snapshotTruncated: snapshot.truncated,
+        viewport: state.controller.viewport(),
+        stateVersion: state.version,
+        observedAt: this.#timestamp(),
+      };
+      state.observation = observation;
+      this.#observations.push({
+        id: observation.id,
+        side: observation.side,
+        path: observation.path,
+        title: observation.title,
+        snapshotTruncated: observation.snapshotTruncated,
+        viewport: observation.viewport,
+        stateVersion: observation.stateVersion,
+        observedAt: observation.observedAt,
+      });
+      return {
+        value: observation,
+        result: `observation ${observation.id}; snapshot sha256=${sha256(snapshot.value)}; ${Buffer.byteLength(snapshot.value)} bytes`,
+        observationId: observation.id,
+        stateVersion: state.version,
+      };
+    });
   }
 
   async navigate(input: {
@@ -768,7 +888,10 @@ export class LiveBrowserSession {
         const state = this.#invalidate(input.side);
         const target = new URL(step.path, `${this.#origins[input.side]}/`);
         if (target.origin !== this.#origins[input.side]) {
-          throw new LiveBrowserError("SAME_ORIGIN_REQUIRED", "Navigation must remain on the assigned origin.");
+          throw new LiveBrowserError(
+            "SAME_ORIGIN_REQUIRED",
+            "Navigation must remain on the assigned origin.",
+          );
         }
         await state.controller.navigate(target.href, step.waitUntil, signal);
         const path = this.#safeCurrentPath(input.side, state.controller);
@@ -787,10 +910,7 @@ export class LiveBrowserSession {
     readonly locator: TestLocator;
     readonly signal?: AbortSignal;
   }): Promise<LiveCountResult> {
-    const locator = parseStep(
-      { action: "click", target: input.locator },
-      "click",
-    ).target;
+    const locator = parseStep({ action: "click", target: input.locator }, "click").target;
     return this.#tool(
       "browser_count",
       input.side,
@@ -815,10 +935,7 @@ export class LiveBrowserSession {
     readonly locator: TestLocator;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const locator = parseStep(
-      { action: "click", target: input.locator },
-      "click",
-    ).target;
+    const locator = parseStep({ action: "click", target: input.locator }, "click").target;
     return this.#interaction(
       "browser_click",
       input.side,
@@ -837,10 +954,7 @@ export class LiveBrowserSession {
     readonly value: LiveFillValue;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const step = parseStep(
-      { action: "fill", target: input.locator, value: input.value },
-      "fill",
-    );
+    const step = parseStep({ action: "fill", target: input.locator, value: input.value }, "fill");
     const result = await this.#interaction(
       "browser_fill",
       input.side,
@@ -859,12 +973,19 @@ export class LiveBrowserSession {
         const suppliedValue =
           step.value.kind === "literal" ? step.value.value : this.#secrets[step.value.name];
         if (suppliedValue === undefined) {
-          throw new LiveBrowserError("SECRET_NOT_APPROVED", "Requested secret name is not approved.");
+          throw new LiveBrowserError(
+            "SECRET_NOT_APPROVED",
+            "Requested secret name is not approved.",
+          );
+        }
+        if (step.value.kind === "secret") {
+          const state = this.#side(input.side);
+          state.secretTainted = true;
+          state.recordingSecretTainted = true;
         }
         await controller.fill(step.target, suppliedValue, signal);
       },
     );
-    if (step.value.kind === "secret") this.#side(input.side).secretTainted = true;
     return result;
   }
 
@@ -903,10 +1024,7 @@ export class LiveBrowserSession {
     readonly key: LivePressKey;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const step = parseStep(
-      { action: "press", target: input.locator, key: input.key },
-      "press",
-    );
+    const step = parseStep({ action: "press", target: input.locator, key: input.key }, "press");
     return this.#interaction(
       "browser_press",
       input.side,
@@ -967,7 +1085,8 @@ export class LiveBrowserSession {
                 `Assertion locator resolved to ${count} elements; at most one is allowed.`,
               );
             }
-            const visible = count === 1 && (await state.controller.isVisible(expected.target, signal));
+            const visible =
+              count === 1 && (await state.controller.isVisible(expected.target, signal));
             const desired = expected.kind === "visible";
             passed = visible === desired;
             expectedText = desired ? "visible" : "hidden";
@@ -986,7 +1105,10 @@ export class LiveBrowserSession {
           }
         }
         const redactedActual = this.#redact(actualText);
-        if (redactedActual !== actualText) state.secretTainted = true;
+        if (redactedActual !== actualText) {
+          state.secretTainted = true;
+          state.recordingSecretTainted = true;
+        }
         const assertion: LiveAssertionRecord = {
           id: this.#opaqueId("assert"),
           name,
@@ -1018,10 +1140,7 @@ export class LiveBrowserSession {
     readonly name: string;
     readonly signal?: AbortSignal;
   }): Promise<LiveCheckpointRecord> {
-    const name = parseStep(
-      { action: "checkpoint", name: input.name },
-      "checkpoint",
-    ).name;
+    const name = parseStep({ action: "checkpoint", name: input.name }, "checkpoint").name;
     return this.#tool(
       "browser_checkpoint",
       input.side,
@@ -1033,7 +1152,11 @@ export class LiveBrowserSession {
         if (this.#checkpoints.length >= this.#budgets.maxCheckpoints) {
           throw new LiveBrowserError("ARTIFACT_LIMIT", "Session checkpoint limit is exhausted.");
         }
-        if (this.#checkpoints.some((checkpoint) => checkpoint.side === input.side && checkpoint.name === name)) {
+        if (
+          this.#checkpoints.some(
+            (checkpoint) => checkpoint.side === input.side && checkpoint.name === name,
+          )
+        ) {
           throw new LiveBrowserError("INVALID_INPUT", "Checkpoint names must be unique per side.");
         }
         let checkpoint: LiveCheckpointRecord;
@@ -1049,18 +1172,24 @@ export class LiveBrowserSession {
         } else {
           const bytes = await state.controller.screenshot(signal);
           if (bytes.byteLength === 0 || bytes.byteLength > this.#budgets.maxArtifactBytes) {
-            throw new LiveBrowserError("ARTIFACT_LIMIT", "Checkpoint exceeds the per-artifact limit.");
+            throw new LiveBrowserError(
+              "ARTIFACT_LIMIT",
+              "Checkpoint exceeds the per-artifact limit.",
+            );
           }
           if (this.#totalArtifactBytes + bytes.byteLength > this.#budgets.maxTotalArtifactBytes) {
-            throw new LiveBrowserError("ARTIFACT_LIMIT", "Checkpoint exceeds the review artifact limit.");
+            throw new LiveBrowserError(
+              "ARTIFACT_LIMIT",
+              "Checkpoint exceeds the review artifact limit.",
+            );
           }
           const digest = sha256(bytes);
           const artifactId = this.#opaqueDigestId("artifact", `${input.side}\0${name}\0${digest}`);
-          const metadata: StoredArtifact["metadata"] = {
+          const metadata = {
             artifactId,
             digest,
             byteSize: bytes.byteLength,
-            mediaType: "image/png",
+            mediaType: "image/png" as const,
           };
           this.#artifacts.set(artifactId, { metadata, bytes: Uint8Array.from(bytes) });
           this.#totalArtifactBytes += bytes.byteLength;
@@ -1106,7 +1235,10 @@ export class LiveBrowserSession {
           startingIndex = cursor.index;
         }
         const sideEvents = this.#events.filter((event) => event.side === input.side);
-        const events = sideEvents.slice(startingIndex, startingIndex + this.#budgets.maxEventsPerRead);
+        const events = sideEvents.slice(
+          startingIndex,
+          startingIndex + this.#budgets.maxEventsPerRead,
+        );
         const nextIndex = startingIndex + events.length;
         const cursor = this.#opaqueId("cursor");
         this.#eventCursors.set(cursor, { side: input.side, index: nextIndex });
@@ -1123,41 +1255,37 @@ export class LiveBrowserSession {
     readonly side: ReviewSide;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    return this.#tool(
-      "browser_reset",
-      input.side,
-      {},
-      input.signal,
-      async ({ signal }) => {
-        if (this.#resetsUsed >= this.#budgets.maxResets) {
-          throw new LiveBrowserError(
-            "ACTION_BUDGET_EXHAUSTED",
-            "Session browser-reset budget is exhausted.",
-          );
-        }
-        this.#resetsUsed += 1;
-        signal.throwIfAborted();
-        const previous = this.#invalidate(input.side);
-        await previous.controller.close();
-        signal.throwIfAborted();
-        const controller = await this.#runtime.createSide(
-          input.side,
-          this.#origins[input.side],
-          (event) => this.#recordBrowserEvent(input.side, event),
+    return this.#tool("browser_reset", input.side, {}, input.signal, async ({ signal }) => {
+      if (this.#resetsUsed >= this.#budgets.maxResets) {
+        throw new LiveBrowserError(
+          "ACTION_BUDGET_EXHAUSTED",
+          "Session browser-reset budget is exhausted.",
         );
-        previous.controller = controller;
-        previous.secretTainted = false;
-        const path = this.#safeCurrentPath(input.side, controller);
-        return {
-          value: { side: input.side, stateVersion: previous.version, path },
-          result: `${input.side} context reset`,
-          stateVersion: previous.version,
-        };
-      },
-    );
+      }
+      this.#resetsUsed += 1;
+      signal.throwIfAborted();
+      const previous = this.#invalidate(input.side);
+      await previous.controller.close();
+      signal.throwIfAborted();
+      const controller = await this.#runtime.createSide(
+        input.side,
+        this.#origins[input.side],
+        (event) => this.#recordBrowserEvent(input.side, event),
+      );
+      previous.controller = controller;
+      previous.secretTainted = false;
+      const path = this.#safeCurrentPath(input.side, controller);
+      return {
+        value: { side: input.side, stateVersion: previous.version, path },
+        result: `${input.side} context reset`,
+        stateVersion: previous.version,
+      };
+    });
   }
 
-  async seal(state: Exclude<LiveBrowserTerminalState, "active"> = "finished"): Promise<LiveBrowserEvidence> {
+  async seal(
+    state: Exclude<LiveBrowserTerminalState, "active"> = "finished",
+  ): Promise<LiveBrowserEvidence> {
     if (this.#sealPromise) return this.#sealPromise;
     const terminalState = this.#terminalState === "active" ? state : this.#terminalState;
     this.#terminalState = terminalState;
@@ -1172,11 +1300,19 @@ export class LiveBrowserSession {
       const evidenceSequence = ++this.#evidenceSequence;
       let outcome: LiveEvidenceEntry["outcome"] = "success";
       let result = `session sealed as ${terminalState}`;
+      for (const side of ["base", "head"] as const) {
+        const finalized = await this.#finalizeRecording(side);
+        this.#recordings.push(finalized.recording);
+        if (finalized.error) {
+          outcome = "error";
+          result = `${result}; ${side} recording unavailable: ${finalized.error}`;
+        }
+      }
       try {
         await this.#runtime.close();
       } catch (error) {
         outcome = "error";
-        result = this.#redact(errorMessage(error));
+        result = `${result}; browser cleanup failed: ${this.#redact(errorMessage(error))}`;
       }
       this.#ledger.push({
         id: this.#opaqueId("evidence"),
@@ -1188,6 +1324,7 @@ export class LiveBrowserSession {
         outcome,
         result: boundedUtf8(result, 2_000).value,
       });
+      this.#artifactsSealed = true;
       return this.evidence();
     });
     this.#sealPromise = sealPromise;
@@ -1199,12 +1336,85 @@ export class LiveBrowserSession {
   }
 
   artifact(artifactId: string): Uint8Array {
-    if (this.#terminalState === "active") {
-      throw new LiveBrowserError("SESSION_SEALED", "Artifacts are available only after evidence is sealed.");
+    if (!this.#artifactsSealed) {
+      throw new LiveBrowserError(
+        "SESSION_SEALED",
+        "Artifacts are available only after evidence is sealed.",
+      );
     }
     const artifact = this.#artifacts.get(artifactId);
-    if (!artifact) throw new LiveBrowserError("INVALID_INPUT", "Artifact ID is not in the sealed manifest.");
+    if (!artifact)
+      throw new LiveBrowserError("INVALID_INPUT", "Artifact ID is not in the sealed manifest.");
     return Uint8Array.from(artifact.bytes);
+  }
+
+  async #finalizeRecording(side: ReviewSide): Promise<{
+    readonly recording: LiveRecordingArtifactRecord;
+    readonly error?: string;
+  }> {
+    const state = this.#side(side);
+    const withheld = (): LiveRecordingArtifactRecord => ({
+      side,
+      captured: false,
+      createdAt: this.#timestamp(),
+    });
+    if (state.recordingSecretTainted) {
+      try {
+        await state.controller.finishRecording(false, maximumLiveBrowserRecordingArtifactBytes);
+        return { recording: withheld() };
+      } catch (error) {
+        return {
+          recording: withheld(),
+          error: boundedUtf8(this.#redact(errorMessage(error)), 500).value,
+        };
+      }
+    }
+
+    try {
+      const bytes = await state.controller.finishRecording(
+        true,
+        maximumLiveBrowserRecordingArtifactBytes,
+      );
+      if (
+        !bytes ||
+        bytes.byteLength === 0 ||
+        bytes.byteLength > maximumLiveBrowserRecordingArtifactBytes
+      ) {
+        throw new LiveBrowserError(
+          "ARTIFACT_LIMIT",
+          "Browser recording is empty or exceeds the per-side artifact limit.",
+        );
+      }
+      if (this.#totalArtifactBytes + bytes.byteLength > this.#budgets.maxTotalArtifactBytes) {
+        throw new LiveBrowserError(
+          "ARTIFACT_LIMIT",
+          "Browser recording exceeds the review artifact limit.",
+        );
+      }
+      const digest = sha256(bytes);
+      const artifactId = this.#opaqueDigestId("artifact", `${side}\0recording\0${digest}`);
+      const metadata = {
+        artifactId,
+        digest,
+        byteSize: bytes.byteLength,
+        mediaType: "video/webm" as const,
+      };
+      this.#artifacts.set(artifactId, { metadata, bytes: Uint8Array.from(bytes) });
+      this.#totalArtifactBytes += bytes.byteLength;
+      return {
+        recording: {
+          ...metadata,
+          side,
+          captured: true,
+          createdAt: this.#timestamp(),
+        },
+      };
+    } catch (error) {
+      return {
+        recording: withheld(),
+        error: boundedUtf8(this.#redact(errorMessage(error)), 500).value,
+      };
+    }
   }
 
   async #interaction(
@@ -1340,7 +1550,8 @@ export class LiveBrowserSession {
 
   #side(side: ReviewSide): SideState {
     const state = this.#sides.get(side);
-    if (!state) throw new LiveBrowserError("SESSION_SEALED", `${side} browser context is unavailable.`);
+    if (!state)
+      throw new LiveBrowserError("SESSION_SEALED", `${side} browser context is unavailable.`);
     return state;
   }
 
@@ -1399,7 +1610,10 @@ export class LiveBrowserSession {
     let candidate = path.replace(/\+/g, " ");
     for (let depth = 0; depth < 3; depth += 1) {
       if (this.#redact(candidate) !== candidate) {
-        throw new LiveBrowserError("INVALID_INPUT", "Secret values are forbidden in browser paths.");
+        throw new LiveBrowserError(
+          "INVALID_INPUT",
+          "Secret values are forbidden in browser paths.",
+        );
       }
       try {
         const decoded = decodeURIComponent(candidate);
@@ -1552,7 +1766,10 @@ export class LiveBrowserSession {
       url.search !== "" ||
       url.hash !== ""
     ) {
-      throw new LiveBrowserError("INVALID_INPUT", "Browser origin must contain only scheme and authority.");
+      throw new LiveBrowserError(
+        "INVALID_INPUT",
+        "Browser origin must contain only scheme and authority.",
+      );
     }
     return url.origin;
   }
@@ -1561,7 +1778,10 @@ export class LiveBrowserSession {
     const budgets = { ...defaultBudgets, ...overrides };
     const entries = Object.entries(budgets);
     if (entries.some(([, value]) => !Number.isSafeInteger(value) || value <= 0)) {
-      throw new LiveBrowserError("INVALID_INPUT", "Browser budgets must be positive safe integers.");
+      throw new LiveBrowserError(
+        "INVALID_INPUT",
+        "Browser budgets must be positive safe integers.",
+      );
     }
     const exceedsPolicyCeiling =
       budgets.maxActions > defaultBudgets.maxActions ||
@@ -1574,7 +1794,10 @@ export class LiveBrowserSession {
       budgets.maxArtifactBytes > defaultBudgets.maxArtifactBytes ||
       budgets.maxTotalArtifactBytes > defaultBudgets.maxTotalArtifactBytes;
     if (exceedsPolicyCeiling) {
-      throw new LiveBrowserError("INVALID_INPUT", "Browser budgets exceed the server policy ceiling.");
+      throw new LiveBrowserError(
+        "INVALID_INPUT",
+        "Browser budgets exceed the server policy ceiling.",
+      );
     }
     return Object.freeze(budgets);
   }

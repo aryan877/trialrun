@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { enqueueRepositoryAnalysis } from "@trialrun/db";
 
+import { connectedOpenAiConnectionId } from "@/lib/agent-connections";
 import { assertCsrf, requireAuth } from "@/lib/auth";
 import { database } from "@/lib/db";
 import { githubApp } from "@/lib/github";
@@ -32,6 +33,7 @@ export async function POST(
     await enqueueRepositoryAnalysis(database(), {
       repositoryId,
       requestedByUserId: auth.user.id,
+      agentConnectionId: await connectedOpenAiConnectionId(auth.user.id),
       sourceSha,
     });
     return NextResponse.redirect(redirectTo(request, `/app/repositories/${repositoryId}?analysis=queued`), 303);

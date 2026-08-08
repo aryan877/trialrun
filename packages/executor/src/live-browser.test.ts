@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
   LiveBrowserError,
   LiveBrowserSession,
+  maximumLiveBrowserRecordingArtifactBytes,
   type LiveBrowserBudgets,
   type LiveBrowserRawEvent,
   type LiveBrowserRuntime,
@@ -13,6 +16,7 @@ import {
   type LiveSelectOption,
 } from "./live-browser";
 import type { TestLocator } from "@trialrun/domain";
+import { liveBrowserEvidenceSchema } from "./live-protocol";
 import type { ReviewSide } from "./types";
 
 const origins = {
@@ -58,10 +62,14 @@ class FakeSideController implements LiveBrowserSideController {
   visible = true;
   text = "Saved successfully";
   screenshotBytes = Uint8Array.from([137, 80, 78, 71]);
+  recordingBytes: Uint8Array;
+  readonly recordingCaptureRequests: boolean[] = [];
   redirectUrl?: string;
   closed = false;
   hangSnapshot = false;
   readonly snapshotEntered = voidDeferred();
+  recordingGate?: VoidDeferred;
+  recordingEntered?: VoidDeferred;
   clickGate?: VoidDeferred;
   clickEntered?: VoidDeferred;
 
@@ -69,6 +77,9 @@ class FakeSideController implements LiveBrowserSideController {
     this.side = side;
     this.url = `${origin}/`;
     this.#timeline = timeline;
+    this.recordingBytes = Uint8Array.from(
+      side === "base" ? [26, 69, 223, 163, 66] : [26, 69, 223, 163, 72],
+    );
   }
 
   currentUrl(): string {
@@ -95,11 +106,7 @@ class FakeSideController implements LiveBrowserSideController {
     return { width: 1_440, height: 900 };
   }
 
-  navigate(
-    url: string,
-    _waitUntil: LiveNavigationWaitUntil,
-    signal: AbortSignal,
-  ): Promise<void> {
+  navigate(url: string, _waitUntil: LiveNavigationWaitUntil, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     this.#record("navigate");
     this.url = this.redirectUrl ?? url;
@@ -128,11 +135,7 @@ class FakeSideController implements LiveBrowserSideController {
     return Promise.resolve();
   }
 
-  select(
-    _locator: TestLocator,
-    _option: LiveSelectOption,
-    signal: AbortSignal,
-  ): Promise<number> {
+  select(_locator: TestLocator, _option: LiveSelectOption, signal: AbortSignal): Promise<number> {
     signal.throwIfAborted();
     this.#record("select");
     return Promise.resolve(1);
@@ -162,11 +165,29 @@ class FakeSideController implements LiveBrowserSideController {
     return Promise.resolve(Uint8Array.from(this.screenshotBytes));
   }
 
-  close(): Promise<void> {
-    if (this.closed) return Promise.resolve();
+  async finishRecording(capture: boolean, maximumBytes: number): Promise<Uint8Array | undefined> {
+    if (this.recordingCaptureRequests.length > 0) {
+      return this.recordingCaptureRequests[0] === true
+        ? Uint8Array.from(this.recordingBytes)
+        : undefined;
+    }
+    this.recordingCaptureRequests.push(capture);
     this.closed = true;
-    this.#record("close");
-    return Promise.resolve();
+    this.#record("finishRecording");
+    this.recordingEntered?.resolve();
+    if (this.recordingGate) await this.recordingGate.promise;
+    if (!capture) return undefined;
+    if (this.recordingBytes.byteLength > maximumBytes) {
+      throw new LiveBrowserError("ARTIFACT_LIMIT", "Fake recording exceeds its artifact limit.");
+    }
+    return Uint8Array.from(this.recordingBytes);
+  }
+
+  close(): Promise<void> {
+    if (this.recordingCaptureRequests.length > 0) return Promise.resolve();
+    return this.finishRecording(false, maximumLiveBrowserRecordingArtifactBytes).then(
+      () => undefined,
+    );
   }
 
   #record(operation: string): void {
@@ -198,7 +219,9 @@ class FakeRuntime implements LiveBrowserRuntime {
   async close(): Promise<void> {
     this.closeCount += 1;
     await Promise.all(
-      [...this.#controllers.base, ...this.#controllers.head].map((controller) => controller.close()),
+      [...this.#controllers.base, ...this.#controllers.head].map((controller) =>
+        controller.close(),
+      ),
     );
   }
 
@@ -246,6 +269,10 @@ async function sessionFixture(
 
 function errorCode(error: unknown): string | undefined {
   return error instanceof LiveBrowserError ? error.code : undefined;
+}
+
+function sha256(value: Uint8Array | string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 describe("LiveBrowserSession observation fences", () => {
@@ -331,9 +358,9 @@ describe("LiveBrowserSession origin and side isolation", () => {
     ).resolves.toMatchObject({ path: "/settings?tab=profile" });
 
     runtime.latest("base").redirectUrl = "https://attacker.example/phish";
-    await expect(
-      session.navigate({ side: "base", path: "/redirect" }),
-    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "SAME_ORIGIN_REQUIRED");
+    await expect(session.navigate({ side: "base", path: "/redirect" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "SAME_ORIGIN_REQUIRED",
+    );
     await expect(
       session.navigate({ side: "head", path: "https://attacker.example/phish" }),
     ).rejects.toSatisfy((error: unknown) => errorCode(error) === "INVALID_INPUT");
@@ -415,6 +442,26 @@ describe("LiveBrowserSession secrets and evidence", () => {
       outcome: "error",
       errorCode: "SECRET_NOT_APPROVED",
     });
+
+    await session.reset({ side: "base" });
+    const cleanContextCheckpoint = await session.checkpoint({
+      side: "base",
+      name: "after-secret-reset",
+    });
+    expect(cleanContextCheckpoint.captured).toBe(true);
+    const resetBase = runtime.latest("base");
+
+    const sealed = await session.seal();
+    expect(sealed.recordings).toEqual([
+      expect.objectContaining({ side: "base", captured: false }),
+      expect.objectContaining({ side: "head", captured: true, mediaType: "video/webm" }),
+    ]);
+    expect(sealed.recordings[0]).not.toHaveProperty("artifactId");
+    expect(sealed.recordings[0]).not.toHaveProperty("digest");
+    expect(sealed.recordings[0]).not.toHaveProperty("byteSize");
+    expect(sealed.recordings[0]).not.toHaveProperty("mediaType");
+    expect(base.recordingCaptureRequests).toEqual([false]);
+    expect(resetBase.recordingCaptureRequests).toEqual([false]);
   });
 
   it("records assertions and bounded cursor events in monotonic evidence order", async () => {
@@ -428,9 +475,9 @@ describe("LiveBrowserSession secrets and evidence", () => {
     const second = await session.events({ side: "head", cursor: first.cursor });
     expect(second.events.map((event) => event.message)).toEqual(["second"]);
     expect(second.hasMore).toBe(false);
-    await expect(
-      session.events({ side: "base", cursor: first.cursor }),
-    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "INVALID_CURSOR");
+    await expect(session.events({ side: "base", cursor: first.cursor })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "INVALID_CURSOR",
+    );
 
     runtime.latest("head").url = `${origins.head}/done`;
     await expect(
@@ -456,7 +503,11 @@ describe("LiveBrowserSession secrets and evidence", () => {
     ).resolves.toMatchObject({ passed: true, actual: "/done" });
 
     const evidence = session.evidence();
-    expect(evidence.ledger.map(({ sequence }) => sequence).every((value, index, values) => index === 0 || value > (values[index - 1] ?? 0))).toBe(true);
+    expect(
+      evidence.ledger
+        .map(({ sequence }) => sequence)
+        .every((value, index, values) => index === 0 || value > (values[index - 1] ?? 0)),
+    ).toBe(true);
     expect(
       evidence.ledger.every(
         ({ startedAt, completedAt }) => Date.parse(completedAt) > Date.parse(startedAt),
@@ -498,9 +549,9 @@ describe("LiveBrowserSession budgets and lifecycle", () => {
   it("enforces the action ceiling and the wall-clock deadline server-side", async () => {
     const actionFixture = await sessionFixture({ budgets: { maxActions: 1 } });
     await actionFixture.session.navigate({ side: "base", path: "/one" });
-    await expect(
-      actionFixture.session.reset({ side: "head" }),
-    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "ACTION_BUDGET_EXHAUSTED");
+    await expect(actionFixture.session.reset({ side: "head" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "ACTION_BUDGET_EXHAUSTED",
+    );
     expect(actionFixture.session.status()).toMatchObject({ actionsUsed: 1, actionsRemaining: 0 });
 
     let nowMs = Date.parse("2026-08-08T00:00:00.000Z");
@@ -510,9 +561,9 @@ describe("LiveBrowserSession budgets and lifecycle", () => {
     });
     await timeFixture.session.observe({ side: "base" });
     nowMs += 11;
-    await expect(
-      timeFixture.session.observe({ side: "base" }),
-    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "TIME_BUDGET_EXHAUSTED");
+    await expect(timeFixture.session.observe({ side: "base" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "TIME_BUDGET_EXHAUSTED",
+    );
     expect(timeFixture.session.status().state).toBe("timed_out");
     const sealed = await timeFixture.session.seal();
     expect(sealed.status.state).toBe("timed_out");
@@ -521,9 +572,9 @@ describe("LiveBrowserSession budgets and lifecycle", () => {
   it("times out a bounded tool and cancels an active tool before sealing exactly once", async () => {
     const timeoutFixture = await sessionFixture({ budgets: { toolTimeoutMs: 10 } });
     timeoutFixture.runtime.latest("base").hangSnapshot = true;
-    await expect(
-      timeoutFixture.session.observe({ side: "base" }),
-    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "TOOL_TIMEOUT");
+    await expect(timeoutFixture.session.observe({ side: "base" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "TOOL_TIMEOUT",
+    );
 
     const cancellationFixture = await sessionFixture();
     const controller = cancellationFixture.runtime.latest("head");
@@ -531,16 +582,21 @@ describe("LiveBrowserSession budgets and lifecycle", () => {
     const observing = cancellationFixture.session.observe({ side: "head" });
     await controller.snapshotEntered.promise;
     const cancellation = cancellationFixture.session.cancel();
-    await expect(observing).rejects.toSatisfy(
-      (error: unknown) => errorCode(error) === "CANCELLED",
-    );
-    await expect(cancellation).resolves.toMatchObject({ status: { state: "cancelled" } });
+    await expect(observing).rejects.toSatisfy((error: unknown) => errorCode(error) === "CANCELLED");
+    const cancelled = await cancellation;
+    expect(cancelled).toMatchObject({
+      status: { state: "cancelled" },
+      recordings: [
+        { side: "base", captured: true, mediaType: "video/webm" },
+        { side: "head", captured: true, mediaType: "video/webm" },
+      ],
+    });
     await cancellationFixture.session.cancel();
     expect(cancellationFixture.runtime.closeCount).toBe(1);
+    expect(cancellationFixture.runtime.latest("base").recordingCaptureRequests).toEqual([true]);
+    expect(cancellationFixture.runtime.latest("head").recordingCaptureRequests).toEqual([true]);
     expect(
-      cancellationFixture.session
-        .evidence()
-        .ledger.filter(({ tool }) => tool === "finish_review"),
+      cancellationFixture.session.evidence().ledger.filter(({ tool }) => tool === "finish_review"),
     ).toHaveLength(1);
     await expect(
       cancellationFixture.session.navigate({ side: "base", path: "/after-cancel" }),
@@ -562,9 +618,53 @@ describe("LiveBrowserSession budgets and lifecycle", () => {
     expect(runtime.closeCount).toBe(1);
     expect(session.artifact(artifactId)).toEqual(runtime.all("base")[0]?.screenshotBytes);
     expect(() => session.artifact("artifact_not-in-manifest")).toThrowError(LiveBrowserError);
-    expect(
-      session.evidence().ledger.filter(({ tool }) => tool === "finish_review"),
-    ).toHaveLength(1);
+    expect(session.evidence().ledger.filter(({ tool }) => tool === "finish_review")).toHaveLength(
+      1,
+    );
+  });
+
+  it("captures hash-addressed base and head WebM bytes only after seal", async () => {
+    const { session, runtime } = await sessionFixture();
+    const baseController = runtime.latest("base");
+    baseController.recordingGate = voidDeferred();
+    baseController.recordingEntered = voidDeferred();
+    const baseBytes = baseController.recordingBytes;
+    const baseDigest = sha256(baseBytes);
+    const predictedBaseArtifactId = `artifact:${sha256(`base\0recording\0${baseDigest}`)}`;
+
+    expect(session.evidence().recordings).toEqual([]);
+    expect(() => session.artifact(predictedBaseArtifactId)).toThrowError(LiveBrowserError);
+
+    const sealing = session.seal();
+    await baseController.recordingEntered.promise;
+    expect(() => session.artifact(predictedBaseArtifactId)).toThrowError(LiveBrowserError);
+    baseController.recordingGate.resolve();
+    const firstSeal = await sealing;
+    const secondSeal = await session.seal();
+    expect(liveBrowserEvidenceSchema.parse(firstSeal).recordings).toHaveLength(2);
+    expect(secondSeal.recordings).toEqual(firstSeal.recordings);
+    expect(firstSeal.recordings).toHaveLength(2);
+    expect(firstSeal.recordings[0]).toMatchObject({
+      artifactId: predictedBaseArtifactId,
+      side: "base",
+      captured: true,
+      digest: baseDigest,
+      byteSize: baseBytes.byteLength,
+      mediaType: "video/webm",
+    });
+    expect(firstSeal.recordings[1]).toMatchObject({
+      side: "head",
+      captured: true,
+      digest: sha256(runtime.latest("head").recordingBytes),
+      byteSize: runtime.latest("head").recordingBytes.byteLength,
+      mediaType: "video/webm",
+    });
+    expect(session.artifact(predictedBaseArtifactId)).toEqual(baseBytes);
+    const returned = session.artifact(predictedBaseArtifactId);
+    returned[0] = 0;
+    expect(session.artifact(predictedBaseArtifactId)).toEqual(baseBytes);
+    expect(runtime.latest("base").recordingCaptureRequests).toEqual([true]);
+    expect(runtime.latest("head").recordingCaptureRequests).toEqual([true]);
   });
 
   it("serializes concurrent calls across both browser sides", async () => {
@@ -574,7 +674,11 @@ describe("LiveBrowserSession budgets and lifecycle", () => {
     base.clickEntered = voidDeferred();
     const observation = await session.observe({ side: "base" });
 
-    const clicking = session.click({ side: "base", observationId: observation.id, locator: button });
+    const clicking = session.click({
+      side: "base",
+      observationId: observation.id,
+      locator: button,
+    });
     await base.clickEntered.promise;
     const navigating = session.navigate({ side: "head", path: "/queued" });
     await Promise.resolve();

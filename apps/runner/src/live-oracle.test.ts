@@ -128,6 +128,14 @@ function evidence(headPassed = false): LiveBrowserEvidence {
       },
     ],
     matchedCheckpointNames: ["checkout-ready"],
+    recordings: [
+      { side: "base", captured: false, createdAt: timestamp },
+      {
+        side: "head",
+        captured: false,
+        createdAt: "2026-08-08T12:00:00.001Z",
+      },
+    ],
     events: [],
   });
 }

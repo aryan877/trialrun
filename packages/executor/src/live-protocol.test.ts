@@ -51,7 +51,42 @@ function evidence(): LiveBrowserEvidence {
     matchedAssertionNames: ["checkout-total"],
     checkpoints: [],
     matchedCheckpointNames: [],
+    recordings: [],
     events: [],
+  };
+}
+
+function sealedEvidence(): LiveBrowserEvidence {
+  return {
+    ...evidence(),
+    ledger: [
+      {
+        id: "evidence:sealed",
+        sequence: 1,
+        tool: "finish_review",
+        input: { state: "finished" },
+        startedAt: timestamp,
+        completedAt: timestamp,
+        outcome: "success",
+        result: "session sealed as finished",
+      },
+    ],
+    recordings: [
+      {
+        artifactId: `artifact:${"b".repeat(64)}`,
+        side: "base",
+        captured: true,
+        digest: "a".repeat(64),
+        byteSize: 1_024,
+        mediaType: "video/webm",
+        createdAt: timestamp,
+      },
+      {
+        side: "head",
+        captured: false,
+        createdAt: timestamp,
+      },
+    ],
   };
 }
 
@@ -76,5 +111,47 @@ describe("liveBrowserEvidenceSchema", () => {
         matchedAssertionNames: [],
       }),
     ).toThrow("Assertion");
+  });
+
+  it("validates exact sealed base/head recording manifests", () => {
+    expect(liveBrowserEvidenceSchema.parse(sealedEvidence()).recordings).toHaveLength(2);
+
+    const incomplete = sealedEvidence();
+    expect(() =>
+      liveBrowserEvidenceSchema.parse({
+        ...incomplete,
+        recordings: [{ ...incomplete.recordings[0], digest: undefined }, incomplete.recordings[1]],
+      }),
+    ).toThrow("complete artifact manifest");
+
+    const withheldMetadata = sealedEvidence();
+    expect(() =>
+      liveBrowserEvidenceSchema.parse({
+        ...withheldMetadata,
+        recordings: [
+          withheldMetadata.recordings[0],
+          { ...withheldMetadata.recordings[1], artifactId: undefined },
+        ],
+      }),
+    ).toThrow("withheld recordings require none");
+
+    const oversized = sealedEvidence();
+    expect(() =>
+      liveBrowserEvidenceSchema.parse({
+        ...oversized,
+        recordings: [
+          { ...oversized.recordings[0], byteSize: 64 * 1_024 * 1_024 + 1 },
+          oversized.recordings[1],
+        ],
+      }),
+    ).toThrow();
+
+    const duplicateSide = sealedEvidence();
+    expect(() =>
+      liveBrowserEvidenceSchema.parse({
+        ...duplicateSide,
+        recordings: [duplicateSide.recordings[0], { ...duplicateSide.recordings[1], side: "base" }],
+      }),
+    ).toThrow("Recording");
   });
 });

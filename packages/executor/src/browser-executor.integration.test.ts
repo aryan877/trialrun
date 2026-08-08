@@ -135,6 +135,12 @@ function approvedRecipe(sourceSha: string, withSecret: boolean): PolicyApprovedR
         setup: "app",
         port: 3000,
         healthPath: "/health",
+        build: {
+          base: "alpine/nodejs@24",
+          buildCommands: [],
+          deployFiles: ["."],
+        },
+        run: { start: "node server.mjs" },
         testTarget: true,
         publicAccess: false,
         resources: {

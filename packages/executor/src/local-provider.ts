@@ -4,7 +4,6 @@ import { join } from "node:path";
 
 import { policyApprovedRecipeSchema, randomToken, redactText } from "@trialrun/domain";
 
-import { loadLocalSetup } from "./zerops-manifest";
 import { LiveBrowserSession } from "./live-browser";
 import { startLiveBrowserServer } from "./live-server";
 import type {
@@ -116,11 +115,9 @@ export class LocalExecutionProvider implements ExecutionProvider {
     const providerProjectId = `local-${input.reviewId}`;
     await input.onProjectCreated?.(providerProjectId);
     const redactionValues = Object.values(input.secrets);
-    const containers = {} as Record<ReviewSide, ManagedContainer>;
 
     const start = async (side: ReviewSide): Promise<ManagedContainer> => {
       const workspace = input.sourceWorkspaces[side];
-      const setup = await loadLocalSetup(workspace.directory, application.sourceRoot, application.setup);
       const hostPort = await reservePort();
       const name = `trialrun-${input.reviewId.slice(0, 8)}-${side}`;
       const secretEnvironment = Object.fromEntries(
@@ -132,16 +129,24 @@ export class LocalExecutionProvider implements ExecutionProvider {
             return [environmentName, value];
           }),
       );
-      const command = ["set -eu", ...setup.buildCommands, `exec ${setup.startCommand}`].join("\n");
+      const command = [
+        "set -eu",
+        ...application.build.buildCommands,
+        `exec ${application.run.start}`,
+      ].join("\n");
       const environment = {
         ...process.env,
-        ...setup.environment,
         ...secretEnvironment,
         HOST: "0.0.0.0",
         NODE_ENV: "test",
         PORT: String(application.port),
       };
-      const inheritedNames = Object.keys({ ...setup.environment, ...secretEnvironment, HOST: "", NODE_ENV: "", PORT: "" });
+      const inheritedNames = Object.keys({
+        ...secretEnvironment,
+        HOST: "",
+        NODE_ENV: "",
+        PORT: "",
+      });
       const id = await runDocker(
         [
           "run",
@@ -179,14 +184,18 @@ export class LocalExecutionProvider implements ExecutionProvider {
       return { id: normalizedId, port: hostPort };
     };
 
+    const baseContainer = await start("base");
+    let headContainer: ManagedContainer;
     try {
-      containers.base = await start("base");
-      containers.head = await start("head");
+      headContainer = await start("head");
     } catch (error) {
-      if (containers.base) await removeContainer(containers.base.id);
-      if (containers.head) await removeContainer(containers.head.id);
+      await removeContainer(baseContainer.id);
       throw error;
     }
+    const containers: Readonly<Record<ReviewSide, ManagedContainer>> = {
+      base: baseContainer,
+      head: headContainer,
+    };
 
     let destroyed = false;
     const baseUrl = `http://127.0.0.1:${containers.base.port}`;

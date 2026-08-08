@@ -128,6 +128,8 @@ const IGNORED_DIRECTORIES = new Set([
   "dist",
   "node_modules",
   "out",
+  "target",
+  "vendor",
 ]);
 const BLOCKED_CREDENTIAL_NAMES = new Set([
   ".envrc",
@@ -240,6 +242,21 @@ export class RepositoryView {
       throw new Error("Base and head directories cannot contain one another.");
     }
     return new RepositoryView(baseRoot, headRoot);
+  }
+
+  static async createSingle(input: { readonly directory: string }): Promise<RepositoryView> {
+    const parsed = z
+      .object({
+        directory: z
+          .string()
+          .min(1)
+          .max(4_096)
+          .refine(isAbsolute, "Repository directory must be absolute."),
+      })
+      .strict()
+      .parse(input);
+    const root = await canonicalDirectory(parsed.directory, "directory");
+    return new RepositoryView(root, root);
   }
 
   async listTree(input: {
@@ -476,6 +493,12 @@ export function createRepositoryView(input: {
   readonly headDirectory: string;
 }): Promise<RepositoryView> {
   return RepositoryView.create(input);
+}
+
+export function createSingleRepositoryView(input: {
+  readonly directory: string;
+}): Promise<RepositoryView> {
+  return RepositoryView.createSingle(input);
 }
 
 function buildUnifiedDiff(

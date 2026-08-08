@@ -30,6 +30,7 @@ import {
   connectedRepositoryByGitHubIds,
   enqueuePullRequestReview,
 } from "@/lib/reviews";
+import { connectedOpenAiConnectionId } from "@/lib/agent-connections";
 
 export const runtime = "nodejs";
 
@@ -169,6 +170,7 @@ async function handleIssueComment(payload: unknown): Promise<void> {
     await enqueueRepositoryAnalysis(database(), {
       repositoryId: source.repository.id,
       requestedByUserId: source.installation.ownerUserId,
+      agentConnectionId: await connectedOpenAiConnectionId(source.installation.ownerUserId),
       sourceSha,
     });
     return;

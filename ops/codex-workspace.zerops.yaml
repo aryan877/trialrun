@@ -1,0 +1,25 @@
+zerops:
+  - setup: codexworkspace
+    build:
+      base: alpine/nodejs@24
+      buildCommands:
+        - corepack enable
+        - corepack prepare pnpm@9.15.5 --activate
+        - pnpm install --frozen-lockfile
+        - pnpm --filter @trialrun/codex-workspace-bridge deploy --prod .deploy/codex-workspace
+      deployFiles: .deploy/codex-workspace
+    deploy:
+      readinessCheck:
+        httpGet:
+          port: 8787
+          path: /health
+    run:
+      base: zcp@1
+      ports:
+        - port: 8787
+          httpSupport: true
+      envVariables:
+        CODEX_BINARY: codex
+        CODEX_HOME: /home/zerops/.codex
+        PORT: "8787"
+      start: ./.deploy/codex-workspace/node_modules/.bin/tsx ./.deploy/codex-workspace/src/index.ts

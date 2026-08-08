@@ -8,6 +8,7 @@ describe("bounded infrastructure analyst runtime", () => {
       apiKey: "managed-test-key-value",
       codexHome: "/isolated/codex",
       executionHome: "/isolated/home",
+      repositoryToken: "repository-token-that-never-leaks-to-host-tools",
       hostEnvironment: {
         PATH: "/usr/bin:/bin",
         LANG: "C.UTF-8",
@@ -25,6 +26,8 @@ describe("bounded infrastructure analyst runtime", () => {
       OPENAI_API_KEY: "managed-test-key-value",
       PATH: "/usr/bin:/bin",
       TERM: "dumb",
+      TRIALRUN_ANALYST_REPOSITORY_MCP_TOKEN:
+        "repository-token-that-never-leaks-to-host-tools",
     });
     expect(analystRuntimeForTest.disabledAnalystFeatures).toEqual(
       expect.arrayContaining([
@@ -36,5 +39,24 @@ describe("bounded infrastructure analyst runtime", () => {
         "web_search",
       ]),
     );
+  });
+
+  it("enables only the authenticated full-repository read tools", () => {
+    const argumentsList = analystRuntimeForTest.analystSafetyArguments(
+      "http://127.0.0.1:49152/mcp",
+    );
+    expect(argumentsList).toContain(
+      'mcp_servers.trialrun_repository.bearer_token_env_var="TRIALRUN_ANALYST_REPOSITORY_MCP_TOKEN"',
+    );
+    expect(argumentsList).toContain(
+      'mcp_servers.trialrun_repository.enabled_tools=["repository_tree","repository_search","repository_read"]',
+    );
+    expect(argumentsList).toContain("mcp_servers.trialrun_repository.required=true");
+    expect(argumentsList).not.toContain("repository-token-that-never-leaks-to-host-tools");
+    expect(analystRuntimeForTest.repositoryToolNames).toEqual([
+      "repository_tree",
+      "repository_search",
+      "repository_read",
+    ]);
   });
 });

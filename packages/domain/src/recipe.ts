@@ -59,6 +59,52 @@ export const supportedZeropsRuntimeTypes = [
   "alpine/docker@26.1.5",
 ] as const;
 
+export const supportedZeropsBuildTypes = [
+  "alpine@3.23",
+  "ubuntu@24.04",
+  "ubuntu@22.04",
+  "alpine/go@1.22",
+  "ubuntu/go@1.22",
+  "alpine/php@8.5",
+  "ubuntu/php@8.5",
+  "alpine/dotnet@10",
+  "ubuntu/dotnet@10",
+  "alpine/dotnet@9",
+  "ubuntu/dotnet@9",
+  "alpine/dotnet@8",
+  "ubuntu/dotnet@8",
+  "alpine/nodejs@24",
+  "ubuntu/nodejs@24",
+  "alpine/nodejs@22",
+  "ubuntu/nodejs@22",
+  "alpine/nodejs@20",
+  "ubuntu/nodejs@20",
+  "ubuntu/python@3.14",
+  "alpine/python@3.12",
+  "ubuntu/python@3.12",
+  "alpine/python@3.11",
+  "ubuntu/python@3.11",
+  "alpine/ruby@4.0",
+  "ubuntu/ruby@4.0",
+  "alpine/ruby@3.4",
+  "ubuntu/ruby@3.4",
+  "alpine/rust@stable",
+  "ubuntu/rust@stable",
+  "alpine/bun@1.3.9",
+  "ubuntu/bun@1.3.9",
+  "alpine/bun@1.2.2",
+  "ubuntu/bun@1.2.2",
+  "ubuntu/deno@2.0.0",
+  "alpine/elixir@1.16.3",
+  "ubuntu/elixir@1.16.2",
+  "alpine/gleam@1.5.1",
+  "ubuntu/gleam@1.5.1",
+  "alpine/java@21",
+  "ubuntu/java@21",
+  "alpine/java@17",
+  "ubuntu/java@17",
+] as const;
+
 export const supportedZeropsManagedTypes = [
   "postgresql:single@18",
   "postgresql:single@17",
@@ -178,11 +224,13 @@ export function isAllowedManagedServiceSourceProperty(
   type: ZeropsManagedType,
   sourceProperty: string,
 ): boolean {
-  return (managedServiceSourceProperties[type] as readonly string[]).includes(sourceProperty);
+  const allowedProperties: readonly string[] = managedServiceSourceProperties[type];
+  return allowedProperties.includes(sourceProperty);
 }
 
 export const zeropsApplicationTypeSchema = z.enum(supportedZeropsApplicationTypes);
 export const zeropsRuntimeTypeSchema = z.enum(supportedZeropsRuntimeTypes);
+export const zeropsBuildTypeSchema = z.enum(supportedZeropsBuildTypes);
 export const zeropsManagedTypeSchema = z.enum(supportedZeropsManagedTypes);
 
 const shaSchema = z.string().regex(/^[0-9a-f]{40}$/, "Expected a lowercase 40-character Git SHA.");
@@ -191,6 +239,12 @@ const serviceNameSchema = z
   .regex(/^[a-z][a-z0-9]{0,19}$/, "Use a short lowercase service name without punctuation.");
 const environmentNameSchema = z.string().regex(/^[A-Z][A-Z0-9_]{0,79}$/);
 const setupNameSchema = z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/);
+const deploymentCommandSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(2_000)
+  .refine((value) => !value.includes("\0"), "Deployment commands cannot contain NUL bytes.");
 
 export const safeRelativePathSchema = z
   .string()
@@ -206,15 +260,17 @@ export const safeRelativePathSchema = z
 
 export const evidenceCitationSchema = z
   .strictObject({
-    path: safeRelativePathSchema,
-    lineStart: z.number().int().positive().max(1_000_000).optional(),
-    lineEnd: z.number().int().positive().max(1_000_000).optional(),
-    pointer: z.string().startsWith("/").max(500).optional(),
+    path: safeRelativePathSchema.refine(
+      (value) => value !== ".",
+      "A citation must identify a repository file.",
+    ),
+    lineStart: z.number().int().positive().max(1_000_000),
+    lineEnd: z.number().int().positive().max(1_000_000),
     summary: z.string().min(1).max(300),
     confidence: z.enum(["high", "medium", "low"]),
   })
   .superRefine((citation, context) => {
-    if (citation.lineStart && citation.lineEnd && citation.lineEnd < citation.lineStart) {
+    if (citation.lineEnd < citation.lineStart) {
       context.addIssue({
         code: "custom",
         path: ["lineEnd"],
@@ -258,21 +314,48 @@ export const serviceResourcesSchema = z
     }
   });
 
-export const proposedApplicationServiceSchema = z.strictObject({
-  name: serviceNameSchema,
-  zeropsType: zeropsApplicationTypeSchema,
-  sourceRoot: safeRelativePathSchema,
-  setup: setupNameSchema,
-  port: z.number().int().min(10).max(65_435),
-  healthPath: z
-    .string()
-    .regex(/^\/(?!\/)[^\s?#]*$/)
-    .max(300),
-  testTarget: z.boolean(),
-  publicAccess: z.boolean(),
-  resources: serviceResourcesSchema,
-  evidence: z.array(evidenceCitationSchema).min(1).max(12),
+const applicationBuildPlanSchema = z.strictObject({
+  base: zeropsBuildTypeSchema,
+  buildCommands: z.array(deploymentCommandSchema).max(40),
+  deployFiles: z
+    .array(safeRelativePathSchema)
+    .min(1)
+    .max(40)
+    .refine((paths) => new Set(paths).size === paths.length, "Deploy paths must be unique."),
 });
+
+const applicationRunPlanSchema = z.strictObject({
+  start: deploymentCommandSchema,
+});
+
+export const proposedApplicationServiceSchema = z
+  .strictObject({
+    name: serviceNameSchema,
+    zeropsType: zeropsApplicationTypeSchema,
+    sourceRoot: safeRelativePathSchema,
+    setup: setupNameSchema,
+    port: z.number().int().min(10).max(65_435),
+    healthPath: z
+      .string()
+      .regex(/^\/(?!\/)[^\s?#]*$/)
+      .max(300),
+    build: applicationBuildPlanSchema,
+    run: applicationRunPlanSchema,
+    testTarget: z.boolean(),
+    publicAccess: z.boolean(),
+    resources: serviceResourcesSchema,
+    evidence: z.array(evidenceCitationSchema).min(1).max(12),
+  })
+  .superRefine((application, context) => {
+    const runtimeOs = application.zeropsType.startsWith("alpine") ? "alpine" : "ubuntu";
+    if (!application.build.base.startsWith(`${runtimeOs}`)) {
+      context.addIssue({
+        code: "custom",
+        path: ["build", "base"],
+        message: "Build and runtime bases must use the same operating system.",
+      });
+    }
+  });
 
 export const proposedManagedDependencySchema = z
   .strictObject({
@@ -480,53 +563,6 @@ export type InfrastructurePolicyDecision =
       readonly warnings: readonly PolicyIssue[];
     };
 
-const allowedEvidenceBasenames = new Set([
-  ".env.example",
-  "Cargo.toml",
-  "Dockerfile",
-  "Gemfile",
-  "Pipfile",
-  "bun.lock",
-  "bun.lockb",
-  "compose.yaml",
-  "compose.yml",
-  "docker-compose.yaml",
-  "docker-compose.yml",
-  "drizzle.config.js",
-  "drizzle.config.mjs",
-  "drizzle.config.ts",
-  "gleam.toml",
-  "go.mod",
-  "mix.exs",
-  "package-lock.json",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  "poetry.lock",
-  "pom.xml",
-  "pyproject.toml",
-  "requirements.txt",
-  "trialrun.yaml",
-  "trialrun.yml",
-  "yarn.lock",
-  "zerops.yaml",
-  "zerops.yml",
-]);
-
-export function isAllowedRepositoryEvidencePath(path: string): boolean {
-  const parsed = safeRelativePathSchema.safeParse(path);
-  if (!parsed.success || path === "." || path.split("/").length > 5) return false;
-  const basename = path.split("/").at(-1);
-  if (!basename) return false;
-  return (
-    allowedEvidenceBasenames.has(basename) ||
-    basename.endsWith(".csproj") ||
-    basename === "build.gradle" ||
-    basename === "build.gradle.kts" ||
-    path.endsWith("/prisma/schema.prisma")
-  );
-}
-
 const applicationCaps = { cpu: 2, ramGb: 4, diskGb: 10 } as const;
 const dependencyCaps = { cpu: 2, ramGb: 4, diskGb: 10, objectStorageGb: 5 } as const;
 export const reviewResourceCeilings = {
@@ -540,15 +576,6 @@ const executorResources = { cpu: 2, ramGb: 4, diskGb: 10 } as const;
 
 function issuePath(path: readonly PropertyKey[]): string {
   return path.map(String).join(".");
-}
-
-function citationsFor(proposal: InfrastructureProposal): readonly EvidenceCitation[] {
-  return [
-    ...proposal.applications.flatMap(({ evidence }) => evidence),
-    ...proposal.dependencies.flatMap(({ evidence }) => evidence),
-    ...proposal.environmentBindings.flatMap(({ evidence }) => evidence),
-    ...proposal.secretBindings.flatMap(({ evidence }) => evidence),
-  ];
 }
 
 function clampResources(
@@ -577,7 +604,7 @@ function clampResources(
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
-    const object = value as Record<string, unknown>;
+    const object = z.record(z.string(), z.unknown()).parse(value);
     return `{${Object.keys(object)
       .filter((key) => object[key] !== undefined)
       .sort()
@@ -640,15 +667,6 @@ export function applyInfrastructurePolicy(input: unknown): InfrastructurePolicyD
         code: "public_application",
         path: `applications.${index}.publicAccess`,
         message: "Reviewed applications must remain private inside the disposable project.",
-      });
-    }
-  }
-  for (const citation of citationsFor(proposal)) {
-    if (!isAllowedRepositoryEvidencePath(citation.path)) {
-      errors.push({
-        code: "unsupported_evidence",
-        path: citation.path,
-        message: "The citation is outside the bounded repository evidence allowlist.",
       });
     }
   }
@@ -793,13 +811,11 @@ export interface CompiledZeropsService {
   readonly envSecrets?: Readonly<Record<string, string>>;
 }
 
-export interface CompiledDeploymentTarget {
-  readonly side: "base" | "head" | "executor";
+interface CompiledDeploymentTargetCommon {
   readonly logicalService: string;
   readonly hostname: string;
   readonly sourceRoot: string;
   readonly setup: string;
-  readonly sha: string | null;
   readonly port: number;
   readonly healthPath: string;
   readonly environmentBindings: readonly {
@@ -810,6 +826,27 @@ export interface CompiledDeploymentTarget {
   }[];
   readonly secretBindings: readonly { environmentName: string; secretName: string }[];
 }
+
+export type CompiledDeploymentTarget = CompiledDeploymentTargetCommon &
+  (
+    | {
+        readonly side: "base" | "head";
+        readonly sha: string;
+        readonly build: {
+          readonly base: z.infer<typeof zeropsBuildTypeSchema>;
+          readonly buildCommands: readonly string[];
+          readonly deployFiles: readonly string[];
+        };
+        readonly run: {
+          readonly base: z.infer<typeof zeropsApplicationTypeSchema>;
+          readonly start: string;
+        };
+      }
+    | {
+        readonly side: "executor";
+        readonly sha: null;
+      }
+  );
 
 export interface CompiledZeropsReviewTopology {
   readonly project: {
@@ -882,6 +919,15 @@ export function compileZeropsReviewTopology(
         sha: side === "base" ? baseSha : headSha,
         port: application.port,
         healthPath: application.healthPath,
+        build: {
+          base: application.build.base,
+          buildCommands: application.build.buildCommands,
+          deployFiles: application.build.deployFiles,
+        },
+        run: {
+          base: application.zeropsType,
+          start: application.run.start,
+        },
         environmentBindings: recipe.environmentBindings
           .filter(({ targetService }) => targetService === application.name)
           .map(({ environmentName, sourceService, sourceProperty }) => ({

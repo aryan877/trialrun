@@ -2,6 +2,7 @@ import { and, asc, eq, lt, lte, sql } from "drizzle-orm";
 
 import type { TrialRunDatabase } from "./client";
 import {
+  agentConnections,
   githubInstallations,
   repositories,
   repositoryAnalysisJobs,
@@ -12,11 +13,17 @@ export interface ClaimedRepositoryAnalysis {
   readonly job: RepositoryAnalysisJob;
   readonly repository: typeof repositories.$inferSelect;
   readonly installation: typeof githubInstallations.$inferSelect;
+  readonly agentConnectionId: string;
 }
 
 export async function enqueueRepositoryAnalysis(
   db: TrialRunDatabase,
-  input: { readonly repositoryId: string; readonly requestedByUserId: string; readonly sourceSha: string },
+  input: {
+    readonly repositoryId: string;
+    readonly requestedByUserId: string;
+    readonly agentConnectionId: string;
+    readonly sourceSha: string;
+  },
 ): Promise<RepositoryAnalysisJob> {
   return db.transaction(async (tx) => {
     const [repository] = await tx
@@ -33,6 +40,24 @@ export async function enqueueRepositoryAnalysis(
       .limit(1)
       .for("update");
     if (!repository) throw new Error("Repository is not connected to this account.");
+
+    const [agentConnection] = await tx
+      .select({ id: agentConnections.id })
+      .from(agentConnections)
+      .where(
+        and(
+          eq(agentConnections.id, input.agentConnectionId),
+          eq(agentConnections.userId, input.requestedByUserId),
+          eq(agentConnections.provider, "openai"),
+          eq(agentConnections.status, "connected"),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!agentConnection) {
+      throw new Error("The selected OpenAI connection is not connected to this account.");
+    }
+
     const [existing] = await tx
       .select()
       .from(repositoryAnalysisJobs)
@@ -43,12 +68,23 @@ export async function enqueueRepositoryAnalysis(
         ),
       )
       .limit(1);
-    if (existing) return existing;
+    if (existing) {
+      if (existing.agentConnectionId !== agentConnection.id) {
+        throw new Error(
+          "Repository analysis is already queued with a different OpenAI connection.",
+        );
+      }
+      if (existing.sourceSha !== input.sourceSha) {
+        throw new Error("Repository analysis is already queued for a different source commit.");
+      }
+      return existing;
+    }
     const [created] = await tx
       .insert(repositoryAnalysisJobs)
       .values({
         repositoryId: repository.id,
         requestedByUserId: input.requestedByUserId,
+        agentConnectionId: agentConnection.id,
         sourceSha: input.sourceSha,
       })
       .returning();
@@ -77,16 +113,60 @@ export async function claimNextRepositoryAnalysis(
       .limit(1)
       .for("update", { skipLocked: true });
     if (!candidate) return null;
+    if (!candidate.agentConnectionId) {
+      await tx
+        .update(repositoryAnalysisJobs)
+        .set({
+          status: "failed",
+          lockedBy: null,
+          leaseExpiresAt: null,
+          lastError: "Legacy analysis job has no exact OpenAI connection pin and cannot run.",
+        })
+        .where(
+          and(
+            eq(repositoryAnalysisJobs.id, candidate.id),
+            eq(repositoryAnalysisJobs.status, "queued"),
+          ),
+        );
+      return null;
+    }
     const [source] = await tx
-      .select({ repository: repositories, installation: githubInstallations })
+      .select({
+        repository: repositories,
+        installation: githubInstallations,
+        agentConnectionId: agentConnections.id,
+        agentConnectionUserId: agentConnections.userId,
+        agentConnectionProvider: agentConnections.provider,
+        agentConnectionStatus: agentConnections.status,
+      })
       .from(repositories)
       .innerJoin(githubInstallations, eq(repositories.installationId, githubInstallations.id))
+      .innerJoin(agentConnections, eq(agentConnections.id, candidate.agentConnectionId))
       .where(eq(repositories.id, candidate.repositoryId))
       .limit(1);
-    if (!source || !source.repository.isActive || source.installation.suspendedAt) {
+    if (
+      !source ||
+      !source.repository.isActive ||
+      source.installation.suspendedAt ||
+      source.installation.ownerUserId !== candidate.requestedByUserId
+    ) {
       await tx
         .update(repositoryAnalysisJobs)
         .set({ status: "failed", lastError: "GitHub installation or repository is unavailable." })
+        .where(eq(repositoryAnalysisJobs.id, candidate.id));
+      return null;
+    }
+    if (
+      source.agentConnectionUserId !== candidate.requestedByUserId ||
+      source.agentConnectionProvider !== "openai" ||
+      source.agentConnectionStatus !== "connected"
+    ) {
+      await tx
+        .update(repositoryAnalysisJobs)
+        .set({
+          status: "failed",
+          lastError: "The pinned OpenAI connection is no longer connected.",
+        })
         .where(eq(repositoryAnalysisJobs.id, candidate.id));
       return null;
     }
@@ -102,10 +182,19 @@ export async function claimNextRepositoryAnalysis(
         and(
           eq(repositoryAnalysisJobs.id, candidate.id),
           eq(repositoryAnalysisJobs.status, "queued"),
+          eq(repositoryAnalysisJobs.agentConnectionId, candidate.agentConnectionId),
+          eq(repositoryAnalysisJobs.attempts, candidate.attempts),
         ),
       )
       .returning();
-    return claimed ? { job: claimed, ...source } : null;
+    return claimed
+      ? {
+          job: claimed,
+          repository: source.repository,
+          installation: source.installation,
+          agentConnectionId: source.agentConnectionId,
+        }
+      : null;
   });
 }
 

@@ -1,6 +1,7 @@
 import {
   claimNextJob,
   claimNextRepositoryAnalysis,
+  recoverExpiredAgentConnectionJobs,
   createDatabase,
   failJob,
   failRepositoryAnalysis,
@@ -20,6 +21,8 @@ import {
 } from "./cleanup-worker";
 import { runRepositoryAnalysis } from "./run-analysis";
 import { runReview } from "./run-review";
+import { WorkspaceLifecycleWorker } from "./workspace-lifecycle";
+import { ZeropsWorkspacePlatformClient } from "./workspace-platform";
 
 const connection = createDatabase(runnerConfig.DATABASE_URL, 6);
 const shutdownController = new AbortController();
@@ -33,9 +36,36 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 await Promise.all([
+  recoverExpiredAgentConnectionJobs(connection.db),
   recoverExpiredJobs(connection.db),
   recoverExpiredRepositoryAnalyses(connection.db),
 ]);
+const workspaceLifecycle =
+  runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN &&
+  runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID &&
+  runnerConfig.TRIALRUN_BRIDGE_SIGNING_PRIVATE_KEY_BASE64 &&
+  runnerConfig.VAULT_KEY_BASE64 &&
+  runnerConfig.REPOSITORY_MCP_PUBLIC_URL
+    ? new WorkspaceLifecycleWorker({
+        db: connection.db,
+        claimantId: `${runnerConfig.RUNNER_ID}:workspace`,
+        leaseSeconds: runnerConfig.RUNNER_LEASE_SECONDS,
+        signingPrivateKeyBase64: runnerConfig.TRIALRUN_BRIDGE_SIGNING_PRIVATE_KEY_BASE64,
+        vaultKeyBase64: runnerConfig.VAULT_KEY_BASE64,
+        vaultKeyVersion: runnerConfig.VAULT_KEY_VERSION,
+        repositoryMcpUrl: runnerConfig.REPOSITORY_MCP_PUBLIC_URL,
+        platform: new ZeropsWorkspacePlatformClient({
+          apiUrl: runnerConfig.TRIALRUN_ZEROPS_API_URL,
+          accessToken: runnerConfig.TRIALRUN_ZEROPS_ACCESS_TOKEN,
+          clientId: runnerConfig.TRIALRUN_ZEROPS_CLIENT_ID,
+          sourceDirectory: runnerConfig.TRIALRUN_CODEX_WORKSPACE_SOURCE_DIRECTORY,
+          zcliBinary: runnerConfig.ZCLI_BINARY,
+          operationTimeoutMs: runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS * 1_000,
+        }),
+        jobTimeoutMs: runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS * 1_000,
+        logError: (message) => process.stderr.write(`TrialRun workspace worker: ${message}\n`),
+      })
+    : null;
 const cleanupTimeoutMs = Math.max(
   1_000,
   Math.min(
@@ -66,10 +96,14 @@ let nextRecoveryAt = Date.now() + 30_000;
 while (!stopping) {
   if (Date.now() >= nextRecoveryAt) {
     await Promise.all([
+      recoverExpiredAgentConnectionJobs(connection.db),
       recoverExpiredJobs(connection.db),
       recoverExpiredRepositoryAnalyses(connection.db),
     ]);
     nextRecoveryAt = Date.now() + 30_000;
+  }
+  if (workspaceLifecycle && (await workspaceLifecycle.runOnce(shutdownController.signal))) {
+    continue;
   }
   const analysis = await claimNextRepositoryAnalysis(
     connection.db,
@@ -105,7 +139,11 @@ while (!stopping) {
     );
     try {
       analysisController.signal.throwIfAborted();
-      const recipe = await runRepositoryAnalysis(connection.db, analysis);
+      const recipe = await runRepositoryAnalysis(
+        connection.db,
+        analysis,
+        analysisController.signal,
+      );
       analysisController.signal.throwIfAborted();
       await succeedRepositoryAnalysis(
         connection.db,

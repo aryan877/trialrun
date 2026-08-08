@@ -50,6 +50,20 @@
       "when": 1786196518131,
       "tag": "20260808134158_bumpy_sheva_callister",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786210259465,
+      "tag": "20260808173059_codex_workspace_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786212288108,
+      "tag": "20260808180448_analysis_connection_pin",
+      "breakpoints": true
     }
   ]
 }

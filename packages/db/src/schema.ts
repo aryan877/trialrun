@@ -4,6 +4,7 @@ import {
   bigserial,
   boolean,
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -70,9 +71,19 @@ export const agentConnectionModeEnum = pgEnum("agent_connection_mode", [
 ]);
 export const agentConnectionStatusEnum = pgEnum("agent_connection_status", [
   "pending",
+  "provisioning",
+  "awaiting_auth",
   "connected",
+  "reauth_required",
+  "revoking",
   "revoked",
   "failed",
+]);
+export const agentConnectionJobKindEnum = pgEnum("agent_connection_job_kind", [
+  "provision",
+  "authenticate",
+  "verify",
+  "delete",
 ]);
 
 export const users = pgTable(
@@ -224,6 +235,7 @@ export const repositoryAnalysisJobs = pgTable(
     requestedByUserId: uuid("requested_by_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    agentConnectionId: uuid("agent_connection_id"),
     sourceSha: varchar("source_sha", { length: 40 }).notNull(),
     status: analysisJobStatusEnum("status").notNull().default("queued"),
     attempts: integer("attempts").notNull().default(0),
@@ -237,17 +249,30 @@ export const repositoryAnalysisJobs = pgTable(
     updatedAt,
   },
   (table) => [
+    foreignKey({
+      name: "repository_analysis_jobs_connection_fk",
+      columns: [table.agentConnectionId],
+      foreignColumns: [agentConnections.id],
+    }).onDelete("restrict"),
     index("repository_analysis_jobs_claim_idx").on(
       table.status,
       table.availableAt,
       table.createdAt,
     ),
     index("repository_analysis_jobs_repository_idx").on(table.repositoryId, table.createdAt),
+    index("repository_analysis_jobs_agent_connection_idx").on(
+      table.agentConnectionId,
+      table.createdAt,
+    ),
     uniqueIndex("repository_analysis_jobs_one_active_unique")
       .on(table.repositoryId)
       .where(sql`${table.status} in ('queued', 'running')`),
     check("repository_analysis_jobs_source_sha_format", sql`${table.sourceSha} ~ '^[0-9a-f]{40}$'`),
     check("repository_analysis_jobs_attempts_nonnegative", sql`${table.attempts} >= 0`),
+    check(
+      "repository_analysis_jobs_active_connection_pin",
+      sql`${table.agentConnectionId} is not null or ${table.status} in ('succeeded', 'failed')`,
+    ),
   ],
 );
 
@@ -257,7 +282,7 @@ export const agentConnections = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "restrict" }),
     provider: varchar("provider", { length: 32 }).notNull().default("openai"),
     mode: agentConnectionModeEnum("mode").notNull(),
     status: agentConnectionStatusEnum("status").notNull().default("pending"),
@@ -267,7 +292,13 @@ export const agentConnections = pgTable(
     authTag: text("auth_tag"),
     zcpProjectId: varchar("zcp_project_id", { length: 100 }),
     zcpServiceId: varchar("zcp_service_id", { length: 100 }),
+    workspaceOwnershipTokenHash: varchar("workspace_ownership_token_hash", { length: 64 }),
+    workspaceBridgeUrl: text("workspace_bridge_url"),
+    lastErrorCode: varchar("last_error_code", { length: 80 }),
     lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+    deletionStartedAt: timestamp("deletion_started_at", { withTimezone: true }),
+    deletionCompletedAt: timestamp("deletion_completed_at", { withTimezone: true }),
+    deletionProof: jsonb("deletion_proof").$type<AgentConnectionDeletionProof>(),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt,
     updatedAt,
@@ -277,9 +308,140 @@ export const agentConnections = pgTable(
     index("agent_connections_status_idx").on(table.status, table.updatedAt),
     check(
       "agent_connections_mode_material",
-      sql`(${table.mode} = 'managed' and ${table.ciphertext} is null and ${table.zcpProjectId} is null)
-        or (${table.mode} = 'api_key' and ${table.keyVersion} is not null and ${table.iv} is not null and ${table.ciphertext} is not null and ${table.authTag} is not null and ${table.zcpProjectId} is null)
-        or (${table.mode} = 'codex_workspace' and ${table.ciphertext} is null and ${table.zcpProjectId} is not null and ${table.zcpServiceId} is not null)`,
+      sql`(${table.mode} = 'managed'
+          and ${table.keyVersion} is null
+          and ${table.iv} is null
+          and ${table.ciphertext} is null
+          and ${table.authTag} is null
+          and ${table.zcpProjectId} is null
+          and ${table.zcpServiceId} is null
+          and ${table.workspaceOwnershipTokenHash} is null
+          and ${table.workspaceBridgeUrl} is null
+          and ${table.deletionStartedAt} is null
+          and ${table.deletionCompletedAt} is null
+          and ${table.deletionProof} is null)
+        or (${table.mode} = 'api_key'
+          and ${table.keyVersion} is not null
+          and ${table.iv} is not null
+          and ${table.ciphertext} is not null
+          and ${table.authTag} is not null
+          and ${table.zcpProjectId} is null
+          and ${table.zcpServiceId} is null
+          and ${table.workspaceOwnershipTokenHash} is null
+          and ${table.workspaceBridgeUrl} is null
+          and ${table.deletionStartedAt} is null
+          and ${table.deletionCompletedAt} is null
+          and ${table.deletionProof} is null)
+        or (${table.mode} = 'codex_workspace'
+          and ${table.keyVersion} is null
+          and ${table.iv} is null
+          and ${table.ciphertext} is null
+          and ${table.authTag} is null)`,
+    ),
+    check(
+      "agent_connections_workspace_material_order",
+      sql`(${table.zcpServiceId} is null or ${table.zcpProjectId} is not null)
+        and (${table.workspaceBridgeUrl} is null or ${table.zcpServiceId} is not null)
+        and (${table.deletionCompletedAt} is null or (${table.deletionStartedAt} is not null and ${table.deletionProof} is not null))
+        and (${table.deletionProof} is null or ${table.deletionCompletedAt} is not null)`,
+    ),
+    check(
+      "agent_connections_ownership_hash_format",
+      sql`${table.workspaceOwnershipTokenHash} is null or ${table.workspaceOwnershipTokenHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "agent_connections_error_code_format",
+      sql`${table.lastErrorCode} is null or ${table.lastErrorCode} ~ '^[a-z0-9][a-z0-9._-]{0,79}$'`,
+    ),
+  ],
+);
+
+export interface AgentConnectionDeletionProof {
+  readonly provider: "zerops";
+  readonly projectId: string;
+  readonly observedAt: string;
+  readonly result: "not_found";
+}
+
+export const agentConnectionAuthChallenges = pgTable(
+  "agent_connection_auth_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    connectionId: uuid("connection_id").notNull(),
+    keyVersion: integer("key_version").notNull(),
+    iv: text("iv").notNull(),
+    ciphertext: text("ciphertext").notNull(),
+    authTag: text("auth_tag").notNull(),
+    verificationUri: text("verification_uri").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    foreignKey({
+      name: "agent_auth_challenges_connection_fk",
+      columns: [table.connectionId],
+      foreignColumns: [agentConnections.id],
+    }).onDelete("restrict"),
+    uniqueIndex("agent_connection_auth_challenges_connection_unique").on(table.connectionId),
+    index("agent_connection_auth_challenges_expiry_idx").on(table.expiresAt),
+    check("agent_connection_auth_challenges_key_version_positive", sql`${table.keyVersion} > 0`),
+    check(
+      "agent_connection_auth_challenges_ciphertext_complete",
+      sql`length(${table.iv}) > 0 and length(${table.ciphertext}) > 0 and length(${table.authTag}) > 0`,
+    ),
+    check(
+      "agent_connection_auth_challenges_verification_uri_safe",
+      sql`${table.verificationUri} ~ '^https://[^?#]+$'`,
+    ),
+    check(
+      "agent_connection_auth_challenges_expiry_after_creation",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
+export const agentConnectionJobs = pgTable(
+  "agent_connection_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    connectionId: uuid("connection_id").notNull(),
+    kind: agentConnectionJobKindEnum("kind").notNull(),
+    status: jobStatusEnum("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    availableAt: timestamp("available_at", { withTimezone: true }).notNull().defaultNow(),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lockedBy: varchar("locked_by", { length: 160 }),
+    lastErrorCode: varchar("last_error_code", { length: 80 }),
+    createdAt,
+    updatedAt,
+  },
+  (table) => [
+    foreignKey({
+      name: "agent_connection_jobs_connection_fk",
+      columns: [table.connectionId],
+      foreignColumns: [agentConnections.id],
+    }).onDelete("restrict"),
+    index("agent_connection_jobs_claim_idx").on(table.status, table.availableAt, table.createdAt),
+    index("agent_connection_jobs_connection_idx").on(table.connectionId, table.createdAt),
+    uniqueIndex("agent_connection_jobs_one_active_unique")
+      .on(table.connectionId)
+      .where(sql`${table.status} in ('queued', 'running')`),
+    check("agent_connection_jobs_attempts_nonnegative", sql`${table.attempts} >= 0`),
+    check(
+      "agent_connection_jobs_attempts_within_max",
+      sql`${table.attempts} <= ${table.maxAttempts}`,
+    ),
+    check("agent_connection_jobs_max_attempts_bounded", sql`${table.maxAttempts} between 1 and 20`),
+    check(
+      "agent_connection_jobs_lease_material",
+      sql`(${table.status} = 'running' and ${table.lockedBy} is not null and ${table.leaseExpiresAt} is not null)
+        or (${table.status} <> 'running' and ${table.lockedBy} is null and ${table.leaseExpiresAt} is null)`,
+    ),
+    check(
+      "agent_connection_jobs_error_code_format",
+      sql`${table.lastErrorCode} is null or ${table.lastErrorCode} ~ '^[a-z0-9][a-z0-9._-]{0,79}$'`,
     ),
   ],
 );
@@ -479,5 +641,7 @@ export type Review = typeof reviews.$inferSelect;
 export type RepositoryRecipe = typeof repositoryRecipes.$inferSelect;
 export type RepositoryAnalysisJob = typeof repositoryAnalysisJobs.$inferSelect;
 export type AgentConnection = typeof agentConnections.$inferSelect;
+export type AgentConnectionAuthChallenge = typeof agentConnectionAuthChallenges.$inferSelect;
+export type AgentConnectionJob = typeof agentConnectionJobs.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
 export type Artifact = typeof artifacts.$inferSelect;

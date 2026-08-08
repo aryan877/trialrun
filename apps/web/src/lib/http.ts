@@ -11,6 +11,6 @@ export function assertSameOrigin(request: NextRequest): void {
   }
 }
 
-export function redirectTo(request: NextRequest, path: string): URL {
-  return new URL(path, request.url);
+export function redirectTo(_request: NextRequest, path: string): URL {
+  return new URL(path, serverEnv().APP_URL);
 }

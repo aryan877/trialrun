@@ -1,0 +1,24 @@
+zerops:
+  - setup: web
+    build:
+      base: alpine/nodejs@24
+      deployFiles: ./
+    run:
+      base: alpine/nodejs@24
+      ports:
+        - port: 3000
+          httpSupport: true
+      envVariables:
+        APP_URL: https://trialrun.aryankumar.dev
+        ARTIFACT_DRIVER: s3
+        EXECUTION_PROVIDER: zerops
+        GITHUB_APP_ID: "4526353"
+        GITHUB_CLIENT_ID: Iv23liwKU1sADhXQAAiw
+        HOSTNAME: 0.0.0.0
+        NODE_ENV: production
+        PORT: "3000"
+        RUNNER_REPOSITORY_MCP_URL: http://runner:3001/mcp
+        S3_FORCE_PATH_STYLE: "true"
+        S3_REGION: us-east-1
+        VAULT_KEY_VERSION: "1"
+      start: node apps/web/server.js

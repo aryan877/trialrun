@@ -11,13 +11,15 @@ TrialRun launches a pull request and its base commit as two disposable applicati
 The customer flow must remain understandable without infrastructure vocabulary:
 
 1. Create a TrialRun account with email and password.
-2. Connect GitHub and install the TrialRun GitHub App on selected repositories.
-3. Add **test-only** environment variables for a repository.
-4. Enable automatic reviews or choose a pull request and click **Run review**.
-5. Watch base and PR build, boot, and run side by side.
-6. Inspect test steps, screenshots, video, console output, network failures, application logs, and findings.
-7. Receive the same result as a GitHub Check and concise PR comment.
-8. See positive proof that the disposable environment and secrets were removed.
+2. Choose TrialRun-managed Codex, an encrypted OpenAI API key, or connect the user's own Codex subscription in a dedicated ZCP workspace.
+3. Connect GitHub and install the TrialRun GitHub App on selected repositories.
+4. Let Codex study the full safe repository and review TrialRun's plain-language build/run summary.
+5. Add **test-only** environment variables for a repository.
+6. Enable automatic reviews or choose a pull request and click **Run review**.
+7. Watch base and PR build, boot, and run side by side.
+8. Inspect code findings, live actions, matched screenshots, console output, network failures, application logs, and the first proved difference.
+9. Receive the same result as a GitHub Check and concise PR comment.
+10. See positive proof that the disposable environment and secrets were removed.
 
 Do not make users understand Zerops, agents, sandboxes, MCP, or Playwright to use the main flow.
 
@@ -25,13 +27,13 @@ Do not make users understand Zerops, agents, sandboxes, MCP, or Playwright to us
 
 Initial supported repositories are runnable web applications or HTTP APIs with:
 
-- a valid `zerops.yaml` in the repository root;
-- a build setup name TrialRun can select;
-- a health URL or detectable public URL;
+- build and start commands Codex can cite from repository evidence;
+- a detectable listening port and health URL;
+- dependencies and named environment inputs that fit TrialRun's supported Zerops policy;
 - optional `trialrun.yaml` for deterministic journeys and assertions;
 - only disposable or testing credentials.
 
-Do not claim that an arbitrary repository can always boot without configuration. Libraries, native desktop applications, and mobile-only applications are outside the first release.
+Customer `zerops.yaml` files are ordinary, untrusted repository evidence. TrialRun never requires, copies, patches, or deploys them. The deterministic compiler generates private review-only Zerops manifests from the confirmed typed plan. Do not claim that an arbitrary repository can always boot automatically. Libraries, native desktop applications, mobile-only applications, and repositories whose run contract remains ambiguous are outside the first release.
 
 There is no product demo mode, hardcoded application, fake commit, canned verdict, or simulated review. Every review must trace back to a connected repository, two GitHub-verified immutable commit SHAs, an approved repository recipe, and recorded execution evidence. Automated tests may construct temporary repositories during the test and must delete them afterward; do not ship a fixed fixture application as a product path.
 
@@ -53,9 +55,9 @@ The intended Zerops topology gives base and PR separate stateful dependencies; n
 
 Infrastructure selection is agent-discovered and policy-enforced:
 
-1. The repository analyst reads bounded repository evidence such as `package.json`, lockfiles, workspace manifests, Docker/Compose files, `zerops.yaml`, database clients, environment-variable names, and documented start commands.
+1. The repository analyst explores the complete safe repository through bounded read-only tree, literal-search, and exact-line tools. It decides which files matter instead of receiving a hardcoded manifest list. Credential files, generated dependencies, binaries, unsafe symlinks, and oversized content remain blocked.
 2. It returns a typed infrastructure proposal with cited file evidence and confidence for every service, dependency, command, health check, migration, seed, and environment binding.
-3. Deterministic policy validates and clamps the proposal to supported Zerops types, resource ceilings, private networking defaults, service-count limits, safe relative paths, unique names, and isolated base/head dependencies. The model never receives Zerops credentials and never directly creates infrastructure.
+3. The runner mechanically re-reads every cited path and line. Deterministic policy then validates and clamps the proposal to supported Zerops types, resource ceilings, private networking defaults, service-count limits, safe source-root-relative paths, unique names, and isolated base/head dependencies. The model never receives Zerops credentials and never directly creates infrastructure.
 4. A repository maintainer confirms the first recipe in TrialRun or with an authenticated `@trialrun confirm` GitHub command. Ambiguous or changed topology remains blocked until confirmed.
 5. Confirmed recipes are versioned and reused for PRs. A topology-changing PR produces a new proposal instead of silently modifying infrastructure.
 
@@ -156,7 +158,7 @@ The real provider uses current official Zerops APIs and schemas only:
 
 1. Import one temporary project from generated YAML through `POST /client/{clientId}/project/import`.
 2. Create two policy-generated copies of the approved application graph (`base*` and `head*`) plus one fixed TrialRun executor. Base and head receive separate managed dependencies and private hostnames.
-3. Download public or private source through the GitHub App at exact SHAs and upload it with `zcli push`; never embed a GitHub token in a URL, YAML, command argument, or persisted file. Patch only the validated `zerops.yaml` environment bindings required to point each side at its own dependency names.
+3. Download public or private source through the GitHub App at exact SHAs and upload it with `zcli push`; never embed a GitHub token in a URL, YAML, command argument, or persisted file. Generate a fresh TrialRun-owned `zerops.yaml` for each approved application plan and bind each side only to its own dependency names. Never deploy or modify a customer manifest.
 4. Wait for returned processes and readiness. Application services remain private unless the approved recipe explicitly requires public access; the temporary executor may expose a token-protected control endpoint for the persistent runner.
 5. Start the bounded live Codex session after readiness; let it observe and drive the in-project browser tools interactively while streaming every action, observation, and checkpoint as durable events.
 6. Copy sanitized evidence to persistent object storage.
@@ -245,36 +247,54 @@ This section is the current operational truth. Update it after every external se
 ### GitHub identity and live state
 
 - The intended GitHub App is **TrialRun by Aryan**, App ID `4526353`, slug `trialrun-by-aryan`, public page `https://github.com/apps/trialrun-by-aryan`.
-- Verified repository permissions are Checks write, Contents read, Issues write, Metadata read, and Pull requests read. Verified subscribed repository events are `pull_request` and `issue_comment`; GitHub supplies installation lifecycle deliveries automatically rather than as selectable repository events. The live webhook URL is `https://trialrun.aryankumar.dev/api/github/webhook`, its secret is configured, and SSL verification is enabled. Delivery and Check proof are still pending until production is deployed.
+- Verified repository permissions are Checks write, Contents read, Issues write, Metadata read, and Pull requests read. Verified subscribed repository events are `pull_request` and `issue_comment`; GitHub supplies installation lifecycle deliveries automatically rather than as selectable repository events. The live webhook URL is `https://trialrun.aryankumar.dev/api/github/webhook`, its secret is configured, and SSL verification is enabled. The installation and selected private repository are linked in the live product; webhook delivery, Check, and comment proof remain pending until the first real review completes.
 - The webhook secret and GitHub App client secret are stored in macOS Keychain under the `ai.trialrun.github.webhook-secret` and `ai.trialrun.github.client-secret` services with account `trialrun`. The valid RSA App private key is stored only at ignored mode-600 path `.data/secrets/github-app-private-key.pem`. Never print, commit, copy into tested code, or place any of these values in prompts.
 - GitHub App installation `152212731` is active, unsuspended, owned by `aryan877`, uses selected-repository access, and is scoped only to the private repository `aryan877/trialrun-proof`. Minting a repository-scoped installation token has been live-verified. The private source repository is `aryan877/trialrun`; both repositories remain private until Aryan explicitly authorizes judge access or submission.
-- The direct installation callback reached TrialRun before the production control plane was live and therefore did not carry a signed TrialRun session/state. Do not treat that one-time callback code as reusable or persist it. After production is healthy, link the already installed App from an authenticated TrialRun session using a fresh signed state.
+- The original one-time callback code was never reused or persisted. The live TrialRun account now owns the selected-repository installation and shows `aryan877/trialrun-proof`; all future installation changes must still use a fresh signed state.
 - Product authentication has exactly one path: TrialRun email/password. After login, the user installs the one GitHub App on selected repositories. The same GitHub App's built-in OAuth authorization is used transiently only to prove that the signed-in TrialRun user can access the returned installation; delete the temporary GitHub user token immediately. This is not a second product login and not a separate OAuth App. Do not accept an unverified installation ID and never substitute a personal access token.
 - Keep the proof repository private. A real success gate is one private PR receiving a TrialRun Check and comment from the App after a live Zerops review, with artifacts and teardown proof visible only to its authorized owner/judges.
 
 ### Current product and design state
 
 - The public landing page and `/login` were rebuilt on 8 August. Public pages are light, sentence-case, image-led, use Instrument Sans plus Phosphor icons, and use the owned asset `apps/web/public/brand/trialrun-evidence-field-v1.jpg`. The authenticated dashboard intentionally remains dark.
-- Chromium renders were captured locally for `/` and `/login` at 1440×1000. Web typecheck and lint passed immediately after the rebuild. Re-run mobile/tablet geometry, keyboard, contrast, and production-build checks after further edits.
+- The current landing was rendered and measured at 1440×1000, 1024×1000, 768×1000, and 390×844. It has no horizontal overflow, its desktop hero fits the viewport, keyboard focus remains visible, and web lint, strict typecheck, tests, and production build pass. Re-run the same checks after material UI edits.
 - A judge account must be a real seeded email/password database user, not a hardcoded bypass. Generate its password at deployment time, store it outside Git, and disclose it only in the private judge handoff/submission.
-- Local development currently uses PostgreSQL at `127.0.0.1:55432` and the Next.js dev server at `http://localhost:3000`. A local green run is not hackathon qualification.
+- Local development currently uses PostgreSQL at `127.0.0.1:55432` and the Next.js dev server at `http://localhost:3000`. The production control plane is live on Zerops; local checks still do not substitute for the pending disposable-review proof.
 - The production import is rendered from tracked `zerops-project-import.yaml` by `pnpm live:render-import`. The rendered `.data/live/zerops-project-import.yaml`, generated judge credential state, Cloudflare token, GitHub credentials, and Zerops token are ignored mode-600 files or Keychain items and must never be committed or printed.
-- The tracked persistent topology and all three `zerops.yaml` setups validate against the current live Zerops schemas as of 8 August 2026. Runtime images use the live-schema OS-qualified forms (`alpine/nodejs@24` and `alpine/docker@26.1.5`).
+- The tracked persistent topology, root runner/executor setups, and dedicated web-artifact setup validate against the current live Zerops schemas as of 8 August 2026. Runtime images use the live-schema OS-qualified forms (`alpine/nodejs@24` and `alpine/docker@26.1.5`).
 - The persistent runner intentionally uses `MANAGED_CODEX_HOME=/home/zerops/.codex`. Aryan must authenticate once inside that exact Zerops service home after its final deployment. Never populate it by reading or copying a local Codex credential cache.
 - The deployed Codex binary is the relocatable package entry point at `/var/www/.deploy/runner/node_modules/.pnpm/node_modules/@openai/codex/bin/codex.js`; the nested SDK `.bin` shim is not relocatable after `pnpm deploy` and must not be restored. The current runner filesystem has no proven persistence across replacement, so finish the final runner deployment before asking Aryan to authenticate and treat a later rebuild as requiring reconnection.
-- The latest local gate is green: lint, strict typecheck, 106 tests, and the production build all pass. A production-standalone local smoke test also proved database-backed health, the owned public artwork, the real seeded judge login, and the authenticated dashboard. These facts do not substitute for the pending live Zerops and GitHub proof.
+- The latest complete local gate is green after the source-stamped release helper: lint, strict typecheck, all package suites (170 tests in total), production build, Linux artifact verification, and every migration applied to a brand-new PostgreSQL database. A production-standalone smoke test also proved database-backed health, the owned public artwork, the real seeded judge login, and the authenticated dashboard. None of these facts substitute for the pending disposable Zerops and GitHub proof.
+
+### Persistent production truth
+
+- The persistent Zerops project `RpepTuuvSLGAZ8exBf6vog` contains separate active web, runner, PostgreSQL, and object-storage services. `https://trialrun.aryankumar.dev/api/health` returns `ready`, and the live landing, authenticated dashboard, connected private GitHub repository, recipe UI, evidence UI, and Codex connection settings render from this control plane.
+- The Next.js web application is built as a source-stamped Linux/amd64 standalone artifact. Release it with `pnpm web:artifact:linux` followed by `pnpm web:artifact:deploy`; deployment rejects a missing or stale source stamp, waits for Zerops's deploy process, and finishes only after the database-backed health route passes. Use Zerops `service deploy` for this prebuilt artifact; `service push` incorrectly asks Zerops to rebuild it and was the cause of the previous restart loop. The canonical web setup is `ops/web-artifact.zerops.yaml`; root `zerops.yaml` deliberately contains only the runner and fixed executor setups. The repeat release `trialrun-web-source-stamped-20260809` completed successfully, and the exact web service is active afterward.
+- The runner is active and processing durable jobs. The first live repository-analysis job was pinned to the managed connection, exhausted three bounded attempts after the OpenAI service rejected the runner credential, and is terminal with no lease. No review was started and no disposable project was leaked.
+- The runner's managed Codex home is not authenticated. The only permitted unblock is a fresh official `codex login --device-auth` inside the runner followed by the user's approval at OpenAI's device page. A stale device process was terminated. Never copy the already logged-in local machine's Codex cache.
 
 ### Live execution truth
 
 - The product path now runs one live Codex thread with read-only repository tools and stateful browser tools; it no longer replays a fixed test plan. It records a typed mission, thread/events/usage, exact code citations, browser ledger, assertions, checkpoints, logs, and teardown.
 - DeepSeek/OpenCode audit found a false-pass weakness in assertion pairing, report-text secret persistence, browser-session time starting before provisioning, secret-bearing screenshots, late-abort GitHub divergence, and missing immediate teardown ownership revalidation. These findings have been remediated with targeted tests; the complete local gate now passes. Continue using bounded re-audits before the live judge proof.
 - A pass requires at least two same-name, same-path, same-locator assertion pairs, including a URL contract and a product-behavior assertion, plus a matched screenshot on an asserted path. Any failing base assertion is inconclusive. Agent prose never decides the verdict.
-- Zerops live mode is still **not live-proven**. Before declaring completion: validate current official schemas, create one exact owned disposable project, upload private base/head SHAs, run the live Codex/browser review, persist evidence, publish GitHub, re-read the ownership marker, delete that exact project, and verify it is absent. The Zerops integration token exists only in macOS Keychain service `ai.trialrun.zerops.integration`, account `trialrun`.
+- The persistent Zerops control plane is live, but the disposable review path is still **not live-proven**. Before declaring completion: complete the runner's official Codex device login, analyze and confirm the private proof repository, create one exact owned disposable project, upload private base/head SHAs, run the live Codex/browser review, persist matched WebM/screenshots/logs, publish the GitHub Check and comment, re-read the ownership marker, delete that exact project, and verify it is absent. The Zerops integration token exists only in macOS Keychain service `ai.trialrun.zerops.integration`, account `trialrun`.
 - The persistent control plane must itself be deployed on Zerops with separate web, runner, PostgreSQL, and object-storage services. A generic SSH host may assist staging but cannot replace this challenge requirement.
 
 ### Final no-shortcuts gate
 
 Do not stop at a polished landing page. Completion requires all of the following verified facts: private GitHub App auth/install, private repo/PR ingestion, policy-confirmed per-repository topology, real disposable Zerops provision, live Codex code+browser investigation, deterministic evidence verdict, persisted artifacts, GitHub Check/comment, exact teardown proof, persistent Zerops deployment, `trialrun.aryankumar.dev` DNS/TLS, real judge login, and a submission document containing only URLs that were opened and tested.
+
+### Overnight submission contract — 9 August 2026
+
+- Treat the dedicated customer ZCP workspace as a first-class connection mode, never a cosmetic or “beta” card. Mark it connected only after device login and one real bounded Codex invocation succeed. Use official `codex login --device-auth`; never read, copy, upload, or otherwise reuse a local Codex auth cache.
+- Keep managed Codex available for the first full proof. Every analysis/review job snapshots one exact `agentConnectionId`, so changing the account setting affects only future jobs and a job never switches credentials midway.
+- Finish one private proof pull request end to end: exact GitHub SHAs, TrialRun-generated Zerops topology, isolated base/head services and dependencies, live Codex code review plus adaptive Chrome control, deterministic verdict, matched screenshots and secret-safe base/PR WebM recordings, persistent artifacts, GitHub Check/comment, exact project deletion, and absence proof.
+- The finding page must make the PR recording the primary behavior proof and show the matching base recording for comparison. Store each recording once by hash; findings point to time ranges rather than duplicating or re-encoding video.
+- The judge README and submission must use only real captured proof. Include the verified JSON-generated architecture SVG, official locally stored technology marks with source/attribution, live product and GitHub links, judge credentials in the private handoff, the real PR/Check/evidence/teardown path, threat boundaries, and a short repeatable walkthrough.
+- Improve the landing page copy and product visuals only with claims demonstrated by the real run. Explain in one view that Codex understands the code, Zerops boots both commits, Chrome proves behavior, GitHub receives evidence, and the temporary project is deleted.
+- Before handoff, run full lint, strict typecheck, tests, production build, clean-database migrations, responsive/computed-geometry checks, security and artifact checks, then bounded DeepSeek/OpenCode code-quality and security passes. Remove unused files, empty directories, temporary audit packets, personal references, and stale claims only after preserving required private live evidence.
+- Keep both source and proof repositories private until Aryan explicitly authorizes judge access or submission visibility.
 
 ## Current implementation status
 
@@ -284,11 +304,12 @@ Do not stop at a polished landing page. Completion requires all of the following
 - Previous hardcoded demo path: fully removed from runtime code and test fixtures. The executor integration test now creates and deletes a temporary two-commit Git repository.
 - Secret-bearing browser runs: privacy-safe mode implemented; trace, video, screenshots, and persisted DOM snapshots are disabled.
 - Durable queue: atomic claims, unique runner identities, heartbeats, timeouts, bounded lease recovery, and PostgreSQL integration tests implemented.
-- Web control plane, email/password authentication, dashboard, review evidence/artifact route, and the rebuilt public/login UI: implemented locally; production deployment and end-to-end authorization proof remain pending.
-- GitHub App client/webhook code: implemented and tested locally; real credentials, minimal permissions/events, active selected-repository installation, and private repository token scope are verified. Production callback linking, webhook delivery, Check, and comment remain pending.
-- Typed proposal, deterministic policy, compiled base/head topology, immutable recipe versions, and maintainer confirmation persistence: implemented and unit-tested. Bounded repository evidence collection and agent analysis remain pending.
+- Web control plane, email/password authentication, dashboard, review evidence/artifact route, connection settings, and the rebuilt public/login UI: implemented and deployed on the persistent Zerops project. The live health route and authenticated judge flow are verified.
+- GitHub App client/webhook code: implemented and tested; real credentials, minimal permissions/events, active selected-repository installation, private repository token scope, live account association, and repository display are verified. Webhook delivery, Check, and comment remain pending until the first review.
+- Typed proposal, deterministic policy, compiled base/head topology, immutable recipe versions, maintainer confirmation persistence, bounded repository discovery, and agent analysis are implemented and tested. The first live analysis is blocked only by the runner Codex device login.
 - Real repository local execution: exact SHA staging, recipe-driven Docker boot, matched Chromium execution, evidence/privacy policy, deterministic regression comparison, and verified teardown pass integration tests.
-- Live Codex execution: repository view/MCP, stateful browser MCP, agent mission/report persistence, deterministic oracle, artifact delivery, and review UI are implemented. Oracle/secret/lifecycle hardening from the 8 August audit is complete and the full local gate is green; a live Zerops run remains required.
+- Live Codex execution: repository view/MCP, stateful browser MCP, agent mission/report persistence, deterministic oracle, matched secret-safe WebM recording, artifact delivery, and review UI are implemented and tested. Oracle/secret/lifecycle hardening from the 8 August audit is complete; a live disposable Zerops run remains required.
 - Real Zerops execution: generated import/schema checks, private zCLI source delivery, token-protected in-project browser executor, evidence retrieval, and DB-owned orphan cleanup are implemented but not live-proven. Create/test/publish/delete proof remains pending.
+- Dedicated customer Codex workspace: ZCP import, pinned bridge, official device-code flow, encrypted short-lived challenge, signed runner calls, bounded analysis/review invocation, logout, exact ownership validation, deletion, and 404 proof are implemented and locally tested. Do not label a workspace connected until its first live invocation succeeds; live ZCP proof remains pending.
 
 Update this section as work lands. Do not erase limitations to make the project appear further along.

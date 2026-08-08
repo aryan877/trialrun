@@ -9,8 +9,12 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 
-import { startRepositoryMcpServer, type RepositoryMcpServer } from "./repository-mcp.js";
-import { createRepositoryView } from "./repository-view.js";
+import {
+  startRepositoryAnalysisMcpServer,
+  startRepositoryMcpServer,
+  type RepositoryMcpServer,
+} from "./repository-mcp.js";
+import { createRepositoryView, createSingleRepositoryView } from "./repository-view.js";
 
 const token = "repository-test-token-that-is-long-enough-123456";
 const cleanups: Array<() => Promise<void>> = [];
@@ -77,6 +81,29 @@ async function fixture(): Promise<RepositoryMcpServer> {
   return server;
 }
 
+async function analysisFixture(): Promise<RepositoryMcpServer> {
+  const root = await mkdtemp(join(tmpdir(), "trialrun-repository-analysis-mcp-"));
+  await Promise.all([
+    writeFile(
+      join(root, "package.json"),
+      '{"scripts":{"start":"node src/server.js"}}\n',
+      "utf8",
+    ),
+    writeFile(join(root, "src.ts"), "export const port = 3000;\n", "utf8"),
+    writeFile(join(root, ".env"), "SECRET=must-not-be-readable\n", "utf8"),
+  ]);
+  const view = await createSingleRepositoryView({ directory: root });
+  const server = await startRepositoryAnalysisMcpServer({
+    view,
+    executionToken: token,
+  });
+  cleanups.push(async () => {
+    await server.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  return server;
+}
+
 describe("repository MCP server", () => {
   it("rejects requests without its review-scoped bearer token", async () => {
     const server = await fixture();
@@ -115,5 +142,39 @@ describe("repository MCP server", () => {
     expect(payload).toEqual([
       expect.objectContaining({ path: "app.ts", status: "modified" }),
     ]);
+  });
+
+  it("gives setup Codex the complete safe repository without base/head or log tools", async () => {
+    const server = await analysisFixture();
+    const client = new Client({ name: "trialrun-analysis-test", version: "0.1.0" });
+    const transport = new ExactOptionalClientTransport(new URL(server.mcpUrl), token);
+    await client.connect(transport);
+    cleanups.push(() => client.close());
+
+    const listed = await client.listTools();
+    expect(listed.tools.map(({ name }) => name).sort()).toEqual([
+      "repository_read",
+      "repository_search",
+      "repository_tree",
+    ]);
+
+    const tree = toolResultSchema.parse(
+      await client.callTool({ name: "repository_tree", arguments: {} }),
+    );
+    const first = tree.content[0];
+    if (!first) throw new Error("Expected a repository tree result.");
+    const payload = z
+      .object({ entries: z.array(z.object({ path: z.string() })) })
+      .parse(JSON.parse(first.text));
+    expect(payload.entries.map(({ path }) => path)).toContain("src.ts");
+    expect(payload.entries.map(({ path }) => path)).not.toContain(".env");
+
+    const read = toolResultSchema.parse(
+      await client.callTool({
+        name: "repository_read",
+        arguments: { path: "src.ts", startLine: 1, endLine: 1 },
+      }),
+    );
+    expect(read.isError).not.toBe(true);
   });
 });

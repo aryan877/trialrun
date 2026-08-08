@@ -103,7 +103,8 @@ async function zeropsClientId(accessToken: string): Promise<string> {
       lastError = error;
     }
   }
-  if (!response) throw new Error("Zerops user-info preflight was unreachable.", { cause: lastError });
+  if (!response)
+    throw new Error("Zerops user-info preflight was unreachable.", { cause: lastError });
   if (!response.ok) throw new Error(`Zerops user-info preflight returned HTTP ${response.status}.`);
   const userInfo = userInfoSchema.parse(await response.json());
   const activeClients = userInfo.clientUserList.filter(({ status }) => status === "ACTIVE");
@@ -127,14 +128,21 @@ function requireService(
 }
 
 async function main(): Promise<void> {
-  const [state, githubClientSecret, githubWebhookSecret, zeropsAccessToken, privateKey] =
-    await Promise.all([
-      loadOrCreateState(),
-      keychainSecret("ai.trialrun.github.client-secret"),
-      keychainSecret("ai.trialrun.github.webhook-secret"),
-      keychainSecret("ai.trialrun.zerops.integration"),
-      readFile(new URL("github-app-private-key.pem", secretsDirectory)),
-    ]);
+  const [
+    state,
+    githubClientSecret,
+    githubWebhookSecret,
+    zeropsAccessToken,
+    bridgeSigningPrivateKeyBase64,
+    privateKey,
+  ] = await Promise.all([
+    loadOrCreateState(),
+    keychainSecret("ai.trialrun.github.client-secret"),
+    keychainSecret("ai.trialrun.github.webhook-secret"),
+    keychainSecret("ai.trialrun.zerops.integration"),
+    keychainSecret("ai.trialrun.bridge.signing-private-key"),
+    readFile(new URL("github-app-private-key.pem", secretsDirectory)),
+  ]);
   const clientId = await zeropsClientId(zeropsAccessToken);
   const document = importSchema.parse(
     parse(await readFile(new URL("zerops-project-import.yaml", workspace), "utf8")),
@@ -156,6 +164,7 @@ async function main(): Promise<void> {
     MANAGED_CODEX_HOME: "/home/zerops/.codex",
     SEED_USER_EMAIL: state.judgeEmail,
     SEED_USER_PASSWORD_HASH: state.judgePasswordHash,
+    TRIALRUN_BRIDGE_SIGNING_PRIVATE_KEY_BASE64: bridgeSigningPrivateKeyBase64,
     VAULT_KEY_BASE64: state.vaultKeyBase64,
     TRIALRUN_ZEROPS_ACCESS_TOKEN: zeropsAccessToken,
     TRIALRUN_ZEROPS_CLIENT_ID: clientId,

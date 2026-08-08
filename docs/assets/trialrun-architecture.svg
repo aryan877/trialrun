@@ -1,0 +1,396 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1680 1240" role="img" aria-labelledby="architecture-title architecture-description" preserveAspectRatio="xMidYMid meet">
+  <title id="architecture-title">How one TrialRun review moves</title>
+  <desc id="architecture-description">A GitHub pull request enters TrialRun&apos;s persistent Zerops control plane. One exact Codex connection is selected for the job. The runner creates an isolated Zerops project for the base and pull request applications, records browser evidence, publishes the result to GitHub, and deletes that exact temporary project.</desc>
+  <defs>
+    <marker id="arrow-active" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#171717" /></marker>
+    <marker id="arrow-data" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#67635f" /></marker>
+    <marker id="arrow-optional" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#ff5eaa" /></marker>
+    <marker id="arrow-evidence" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#47c5e8" /></marker>
+    <marker id="arrow-teardown" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#e34b4b" /></marker>
+    <symbol id="architecture-logo-github" viewBox="0 0 98 96" preserveAspectRatio="xMidYMid meet">
+<g clip-path="url(#architecture-logo-github-clip0_730_27126)">
+<path d="M41.4395 69.3848C28.8066 67.8535 19.9062 58.7617 19.9062 46.9902C19.9062 42.2051 21.6289 37.0371 24.5 33.5918C23.2559 30.4336 23.4473 23.7344 24.8828 20.959C28.7109 20.4805 33.8789 22.4902 36.9414 25.2656C40.5781 24.1172 44.4062 23.543 49.0957 23.543C53.7852 23.543 57.6133 24.1172 61.0586 25.1699C64.0254 22.4902 69.2891 20.4805 73.1172 20.959C74.457 23.543 74.6484 30.2422 73.4043 33.4961C76.4668 37.1328 78.0937 42.0137 78.0937 46.9902C78.0937 58.7617 69.1934 67.6621 56.3691 69.2891C59.623 71.3945 61.8242 75.9883 61.8242 81.252L61.8242 91.2051C61.8242 94.0762 64.2168 95.7031 67.0879 94.5547C84.4102 87.9512 98 70.6289 98 49.1914C98 22.1074 75.9883 6.69539e-07 48.9043 4.309e-07C21.8203 1.92261e-07 -1.9479e-07 22.1074 -4.3343e-07 49.1914C-6.20631e-07 70.4375 13.4941 88.0469 31.6777 94.6504C34.2617 95.6074 36.75 93.8848 36.75 91.3008L36.75 83.6445C35.4102 84.2188 33.6875 84.6016 32.1562 84.6016C25.8398 84.6016 22.1074 81.1563 19.4277 74.7441C18.375 72.1602 17.2266 70.6289 15.0254 70.3418C13.877 70.2461 13.4941 69.7676 13.4941 69.1934C13.4941 68.0449 15.4082 67.1836 17.3223 67.1836C20.0977 67.1836 22.4902 68.9063 24.9785 72.4473C26.8926 75.2227 28.9023 76.4668 31.2949 76.4668C33.6875 76.4668 35.2187 75.6055 37.4199 73.4043C39.0469 71.7773 40.291 70.3418 41.4395 69.3848Z" fill="black"/>
+</g>
+<defs>
+<clipPath id="architecture-logo-github-clip0_730_27126">
+<rect width="98" height="96" fill="white"/>
+</clipPath>
+</defs>
+</symbol>
+<symbol id="architecture-logo-zerops" viewBox="0 0 193.99 50.48" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #3dbeb3;
+      }
+
+      .cls-1, .cls-2 {
+        stroke-width: 0px;
+      }
+
+      .cls-2 {
+        fill: #02b3a4;
+      }
+    </style>
+  </defs>
+  <g>
+    <g>
+      <path class="cls-1" d="M61.47,35.56c-.93,0-2.79-.09-2.79-2.1,0-1.25.67-2.12,1.25-2.74l11.12-11.49c.2-.2.35-.41.35-.61,0-.12-.09-.38-.55-.38h-11.38v-3.06h14.64c1.13,0,2.3.44,2.3,2.1,0,1.31-.58,1.89-1.16,2.5l-11.26,11.87c-.15.15-.29.29-.29.52,0,.26.15.32.35.32h12.05v3.06h-14.61Z"/>
+      <path class="cls-1" d="M97.67,35.56h-13.36c-1.75,0-2.97-.73-2.97-3.06v-14.26c0-2.33,1.22-3.06,2.97-3.06h13.24v3.06h-10.91c-1.16,0-1.45.29-1.45,1.45v3.93h12.08v3.06h-12.08v4.36c0,1.16.29,1.45,1.45,1.45h11.03v3.06Z"/>
+      <path class="cls-1" d="M103.2,35.56v-17.31c0-2.33,1.22-3.06,2.97-3.06h10.27c3.78,0,5.09,2.36,5.09,6.43s-1.31,6.81-4.71,6.81h-2.04v.15l7.16,6.98h-4.95l-6.58-6.61c-.44-.47-.96-1.13-.96-1.72v-.47c0-.81.58-1.4,1.72-1.4h3.96c2.12,0,2.44-1.43,2.44-3.75s-.44-3.38-2.88-3.38h-6.2c-1.16,0-1.45.29-1.45,1.45v15.86h-3.84Z"/>
+      <path class="cls-1" d="M147.81,25.37c0,8.24-2.88,10.42-10.48,10.42s-10.45-2.18-10.45-10.42,2.91-10.42,10.45-10.42,10.48,2.18,10.48,10.42ZM137.33,32.73c5,0,6.52-1.54,6.52-7.36s-1.51-7.36-6.52-7.36-6.49,1.54-6.49,7.36,1.48,7.36,6.49,7.36Z"/>
+      <path class="cls-1" d="M176.82,32.5h11.29c1.83,0,1.92-1.51,1.92-2.21,0-.79-.2-1.75-1.98-2.3l-8.03-2.53c-2.68-.84-3.46-2.56-3.46-5.35s1.43-4.92,4.66-4.92h11.73v3.06h-10.71c-.96,0-1.72.58-1.72,2.04,0,.9.15,1.78,1.78,2.3l7.45,2.36c2.97.93,4.25,2.18,4.25,5.38,0,3-1.22,5.24-4.37,5.24h-12.8v-3.06Z"/>
+      <path class="cls-1" d="M166.72,15.19h-10.12c-1.75,0-2.97.73-2.97,3.05v17.31h3.84v-15.85c0-1.16.29-1.45,1.45-1.45h5.91c2.62,0,3.11,1.16,3.11,3.49s-.49,3.55-3.11,3.55h-4.31v3.05h6.2c4.36,0,5.18-3.11,5.18-6.6s-.81-6.54-5.18-6.54Z"/>
+    </g>
+    <g>
+      <path class="cls-1" d="M19.73.26L2.54,6.83c-1.52.58-2.54,2.06-2.54,3.69v16.58l7.9-4.56v-9.3l13.24-5.06V0c-.48,0-.96.09-1.41.26Z"/>
+      <path class="cls-1" d="M8.04,37.3l13.1-7.56v-9.12L.9,32.3c-.55.32-.9.92-.9,1.56v6.11c0,1.63,1.02,3.11,2.54,3.69l17.19,6.57c.45.17.93.26,1.41.26v-8.18l-13.1-5.01Z"/>
+      <path class="cls-1" d="M41.44,18.03c.52-.3.84-.85.84-1.45v-6.06c0-1.63-1.02-3.11-2.54-3.69L22.55.26c-.45-.17-.93-.26-1.41-.26v8.18l12.97,4.96-12.97,7.49v9.12l20.3-11.71Z"/>
+      <path class="cls-1" d="M22.55,50.23l17.19-6.57c1.52-.58,2.54-2.06,2.54-3.69v-16.7l-7.9,4.56v9.43l-13.24,5.06v8.18c.48,0,.96-.09,1.41-.26Z"/>
+    </g>
+  </g>
+  <g>
+    <g>
+      <path class="cls-1" d="M61.47,35.56c-.93,0-2.79-.09-2.79-2.1,0-1.25.67-2.12,1.25-2.74l11.12-11.49c.2-.2.35-.41.35-.61,0-.12-.09-.38-.55-.38h-11.38v-3.06h14.64c1.13,0,2.3.44,2.3,2.1,0,1.31-.58,1.89-1.16,2.5l-11.26,11.87c-.15.15-.29.29-.29.52,0,.26.15.32.35.32h12.05v3.06h-14.61Z"/>
+      <path class="cls-1" d="M97.67,35.56h-13.36c-1.75,0-2.97-.73-2.97-3.06v-14.26c0-2.33,1.22-3.06,2.97-3.06h13.24v3.06h-10.91c-1.16,0-1.45.29-1.45,1.45v3.93h12.08v3.06h-12.08v4.36c0,1.16.29,1.45,1.45,1.45h11.03v3.06Z"/>
+      <path class="cls-1" d="M103.2,35.56v-17.31c0-2.33,1.22-3.06,2.97-3.06h10.27c3.78,0,5.09,2.36,5.09,6.43s-1.31,6.81-4.71,6.81h-2.04v.15l7.16,6.98h-4.95l-6.58-6.61c-.44-.47-.96-1.13-.96-1.72v-.47c0-.81.58-1.4,1.72-1.4h3.96c2.12,0,2.44-1.43,2.44-3.75s-.44-3.38-2.88-3.38h-6.2c-1.16,0-1.45.29-1.45,1.45v15.86h-3.84Z"/>
+      <path class="cls-1" d="M147.81,25.37c0,8.24-2.88,10.42-10.48,10.42s-10.45-2.18-10.45-10.42,2.91-10.42,10.45-10.42,10.48,2.18,10.48,10.42ZM137.33,32.73c5,0,6.52-1.54,6.52-7.36s-1.51-7.36-6.52-7.36-6.49,1.54-6.49,7.36,1.48,7.36,6.49,7.36Z"/>
+      <path class="cls-1" d="M176.82,32.5h11.29c1.83,0,1.92-1.51,1.92-2.21,0-.79-.2-1.75-1.98-2.3l-8.03-2.53c-2.68-.84-3.46-2.56-3.46-5.35s1.43-4.92,4.66-4.92h11.73v3.06h-10.71c-.96,0-1.72.58-1.72,2.04,0,.9.15,1.78,1.78,2.3l7.45,2.36c2.97.93,4.25,2.18,4.25,5.38,0,3-1.22,5.24-4.37,5.24h-12.8v-3.06Z"/>
+      <path class="cls-1" d="M166.72,15.19h-10.12c-1.75,0-2.97.73-2.97,3.05v17.31h3.84v-15.85c0-1.16.29-1.45,1.45-1.45h5.91c2.62,0,3.11,1.16,3.11,3.49s-.49,3.55-3.11,3.55h-4.31v3.05h6.2c4.36,0,5.18-3.11,5.18-6.6s-.81-6.54-5.18-6.54Z"/>
+    </g>
+    <g>
+      <path class="cls-1" d="M19.73.26L2.54,6.83c-1.52.58-2.54,2.06-2.54,3.69v16.58l7.9-4.56v-9.3l13.24-5.06V0c-.48,0-.96.09-1.41.26Z"/>
+      <path class="cls-1" d="M8.04,37.3l13.1-7.56v-9.12L.9,32.3c-.55.32-.9.92-.9,1.56v6.11c0,1.63,1.02,3.11,2.54,3.69l17.19,6.57c.45.17.93.26,1.41.26v-8.18l-13.1-5.01Z"/>
+      <path class="cls-2" d="M41.44,18.03c.52-.3.84-.85.84-1.45v-6.06c0-1.63-1.02-3.11-2.54-3.69L22.55.26c-.45-.17-.93-.26-1.41-.26v8.18l12.97,4.96-12.97,7.49v9.12l20.3-11.71Z"/>
+      <path class="cls-2" d="M22.55,50.23l17.19-6.57c1.52-.58,2.54-2.06,2.54-3.69v-16.7l-7.9,4.56v9.43l-13.24,5.06v8.18c.48,0,.96-.09,1.41-.26Z"/>
+    </g>
+  </g>
+</symbol>
+<symbol id="architecture-logo-trialrun" viewBox="0 0 64 64" preserveAspectRatio="xMidYMid meet">
+  <title id="architecture-logo-trialrun-trialrun-logo-title">TrialRun</title>
+  <rect x="4" y="8" width="56" height="48" rx="10" fill="#171717" />
+  <path d="M22 19h-7v26h7" fill="none" stroke="#fffdfa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M42 19h7v26h-7" fill="none" stroke="#fffdfa" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M39 14 26 50" fill="none" stroke="#b9ff54" stroke-width="6" stroke-linecap="round" />
+</symbol>
+<symbol id="architecture-logo-codex" viewBox="0 0 716 716" preserveAspectRatio="xMidYMid meet">
+<path d="M508.749 317.399C516.777 287.314 508.991 253.884 485.389 230.282C461.788 206.681 428.36 198.895 398.273 206.923C376.231 184.928 343.39 174.956 311.148 183.596C278.906 192.234 255.45 217.292 247.36 247.361C217.291 255.451 192.233 278.91 183.595 311.149C174.957 343.391 184.927 376.232 206.924 398.274C198.896 428.359 206.683 461.789 230.284 485.391C253.885 508.992 287.313 516.779 317.401 508.75C339.442 530.745 372.286 540.717 404.525 532.079C436.767 523.441 460.223 498.384 468.313 468.315C498.383 460.224 523.44 436.766 532.078 404.526C540.716 372.285 530.747 339.443 508.749 317.402V317.399ZM470.899 244.776C486.892 260.77 493.488 282.601 490.687 303.412L415.577 260.046C412.411 258.218 408.509 258.218 405.345 260.046L317.401 310.82V277.526C317.401 275.191 318.652 273.005 320.676 271.837L387.644 233.174C414.178 218.353 448.346 222.223 470.901 244.776H470.899ZM357.837 311.144L398.275 334.491V381.185L357.837 404.532L317.398 381.185V334.491L357.837 311.144ZM264.776 269.693C265.207 239.305 285.644 211.649 316.453 203.393C338.3 197.54 360.505 202.744 377.127 215.573L302.014 258.937C298.848 260.764 296.898 264.144 296.898 267.798V369.346L268.065 352.699C266.043 351.531 264.776 349.353 264.776 347.017V269.691V269.693ZM203.391 316.454C209.244 294.608 224.854 277.978 244.276 269.999V356.73C244.276 360.384 246.226 363.763 249.392 365.591L337.337 416.365L308.503 433.013C306.481 434.181 303.961 434.188 301.939 433.02L234.971 394.357C208.868 378.789 195.138 347.261 203.391 316.454ZM244.775 470.9C228.781 454.906 222.186 433.075 224.986 412.264L300.096 455.63C303.263 457.457 307.164 457.457 310.328 455.63L398.273 404.856V438.149C398.273 440.485 397.022 442.671 394.997 443.839L328.029 482.502C301.495 497.322 267.327 493.452 244.772 470.9H244.775ZM450.897 445.982C450.466 476.371 430.029 504.027 399.22 512.283C377.373 518.136 355.168 512.932 338.547 500.102L413.659 456.738C416.826 454.911 418.775 451.532 418.775 447.877V346.329L447.609 362.977C449.631 364.145 450.897 366.323 450.897 368.659V445.985V445.982ZM512.282 399.221C506.429 421.068 490.819 437.697 471.397 445.676V358.946C471.397 355.292 469.448 351.912 466.281 350.085L378.336 299.311L407.17 282.663C409.192 281.495 411.712 281.487 413.734 282.655L480.702 321.318C506.805 336.887 520.536 368.415 512.282 399.221Z" fill="black"/>
+</symbol>
+<symbol id="architecture-logo-postgresql" viewBox="0 0 847.13 878.13" preserveAspectRatio="xMidYMid meet"><path d="M667.82,610.65c-.45,3.12-1.1,6.94-1.52,10.78-1.72,15.64-3.15,31.31-5.1,46.92-2.05,16.54-4.51,33-6.91,49.53-2.94,20.19-5.41,40.48-9.18,60.53-3.72,19.84-10.48,38.86-23.47,54.71a98.81,98.81,0,0,1-46.59,31.81c-15.12,4.86-30.55,9.42-46.19,11.85-22.3,3.46-44.19.51-63.9-11.64a89.67,89.67,0,0,1-30.57-31.51c-7.36-12.57-13.6-25.63-16.1-40.11-1.5-8.69-2.84-17.43-3.66-26.2-1.57-16.86-2.72-33.77-4-50.65-.07-1,0-2,0-3q-.51-44.85-1-89.7c0-1.09-.1-2.18-.19-4.1-17.23,16.37-37.4,25.32-59.63,29.23a119.45,119.45,0,0,1-42.58.22c-10.69-2-21.49-3.89-31.83-7.16a52.7,52.7,0,0,1-23.57-15c-10.37-11.48-6.59-25.67,5.1-33.74,10.35-7.15,22.5-9.08,34.33-11.95,12.75-3.1,26.48-4.19,37.2-12.24,7.36-5.53,12.89-13.52,19.17-20.46,1.5-1.66,2.74-3.54,4.81-6.24a128.12,128.12,0,0,1-52.69-14.1q-15.09,16.86-30.3,33.83c-5.71,6.39-11.52,12.7-17.09,19.21-8.7,10.16-16.88,20.78-25.92,30.62-14,15.24-30,27.28-52.21,26.27-12.5-.57-23.43-5.65-33-13.31-15.24-12.16-26.56-27.51-36.68-44.15C87.6,553.14,75.22,523.47,64,493.22a1077.9,1077.9,0,0,1-33.95-110.9c-4.65-18.44-8.85-37-13-55.56-2.6-11.6-4.89-23.27-7-34.95s-4-23.47-6-35.2A249.93,249.93,0,0,1,.18,203.48c.92-22.56,2.81-45,8.54-67.07,6.17-23.77,15.81-45.77,30.76-65.08,16.2-20.91,37.28-35.62,62-45.35a188.3,188.3,0,0,1,52-12.61,317.26,317.26,0,0,1,51.2-1A446,446,0,0,1,328,38.94c4.51,1.66,7.54.1,10.79-2,19.81-12.6,41.47-19.9,64.51-24.12,19.25-3.53,38.6-3.46,57.84-2.46,15.57.81,31,4.44,46.5,6.73A14.84,14.84,0,0,0,513.2,17c17.53-4.22,34.94-9,52.59-12.67,10.07-2.07,20.51-2.63,30.82-3.14,14.56-.71,29.21-1.66,43.74-.9,29.3,1.52,57.92,7.14,85.33,18a230.22,230.22,0,0,1,55.43,30.81,241.8,241.8,0,0,1,43.23,42.31c10.48,13.24,15.23,28.3,16.67,44.65,1,11.65,2.34,23.41,1.81,35A360.46,360.46,0,0,1,838,215c-3.39,20.05-7.39,40-12.05,59.82-3.35,14.21-8.09,28.1-12.44,42.06-9.35,30-20.33,59.42-34,87.73-12.25,25.42-25.11,50.56-38.34,75.49C733.31,494.9,724.21,509,715,524.62c3.42,1.54,7,3.82,10.84,4.75,13.52,3.26,27.22,4.34,41.09,2.17,15.48-2.43,31-4.94,46.5-6.86a62.55,62.55,0,0,1,19,.2c12.45,2.38,18,15.19,12.8,27.21C841,562,833.31,569,825.32,575.45,808.81,588.7,790.5,599.22,770,604.78c-13.16,3.58-26.79,5.57-40.32,7.49a175.24,175.24,0,0,1-29.55,1.93C689.58,613.88,679.08,612,667.82,610.65ZM379.27,522.13a63.78,63.78,0,0,1,6.37-.59c20.7.28,35.31,10.44,44.58,28.4,5.35,10.34,5.76,21.44,5.68,33.21-.29,47.13-1.94,94.32,1.64,141.42,1.27,16.55,2.69,33.09,4,49.64a101.29,101.29,0,0,0,15,46c7.18,11.69,16.2,21.33,29.19,26.56a71.28,71.28,0,0,0,36.5,4.55c20.07-2.58,39.3-7.37,57.36-16.72,16.56-8.58,27.08-22.15,33.81-39.13s9.09-35,11.81-52.79c3.14-20.58,5.44-41.3,8.11-61.95,1.34-10.38,2.76-20.74,4-31.13,1.15-9.77,2.06-19.56,3.11-29.34,1.28-11.89,2.75-23.76,3.85-35.67.64-6.89.23-13.9,1.15-20.74,2.3-17.2,10.13-30.88,26.48-38.53,3.43-1.6,7-3,11-4.67-3.76-4.54-7.28-8.44-10.41-12.62a241,241,0,0,1-25.18-41.78c-7.2-15.33-16.16-29.82-24-44.87-14.59-28.07-28.85-56.3-37.61-86.91-5.72-20-9.46-40.2-6.35-61.12,3.07-20.61,13.55-36.19,31.73-46.44,14.34-8.08,30-10.76,46.23-11,10.14-.16,20.28,0,30.5,0-6.57-18.73-15.81-36.62-26.5-53.82a291.72,291.72,0,0,0-59-68.5,243.62,243.62,0,0,0-64.1-39.14,240.26,240.26,0,0,0-66.93-17.14c-13-1.42-26.23-1.35-39.33-1a166.25,166.25,0,0,0-30.31,3.07c-34.82,7.36-63.87,24.7-86.22,52.58-20.53,25.61-33.2,55.19-41.53,86.63-3.79,14.29-6.33,28.92-9,43.48-1.27,7-1.48,14.14-2.21,21.74,4.67-2.27,8.72-4.3,12.83-6.23,26-12.16,52.78-20.17,81.93-16.62,13.28,1.62,25.19,6.46,35.17,15.53,11.54,10.49,17.68,23.78,21.3,38.84a415.76,415.76,0,0,1,10.38,74.69c.73,13.44-1,27-1.76,40.54a151.18,151.18,0,0,1-9.71,44.24c-8.57,22.83-18.21,45.25-27.19,67.92C383.17,508.87,381.44,515.42,379.27,522.13ZM308.19,59.22C279.71,50.4,250.6,43,220.46,40,205.6,38.5,190.8,36.36,175.8,38c-12.69,1.41-25.56,1.87-38.08,4.18-23.27,4.3-44.64,13.49-62.6,29.24-17,14.89-28.6,33.39-36.3,54.65-8.35,23-11.39,47-12.63,71.12a265,265,0,0,0,1,39.23c1.54,15.57,4,31.1,7,46.47,4.57,23.47,9.4,46.92,15.07,70.14,9.63,39.47,20.57,78.59,33.83,117,9.67,28,20.51,55.66,34.3,81.9,9.78,18.59,20.59,36.81,37.15,50.66,15.65,13.09,29.42,13.74,44.55-.35,9.37-8.73,17.34-19,25.86-28.59q18.33-20.7,36.55-41.5c5.43-6.15,10.89-12.28,16.53-18.63-.84-.93-1.48-1.65-2.13-2.35-6.07-6.63-12.72-12.81-18.09-20-11.3-15-18.53-32-22.5-50.43-3.81-17.69-2.93-35.42-1.45-53.19,1.12-13.4,3.57-26.77,3.66-40.16.16-22.17-1.31-44.35-1.68-66.53-.18-11.08.31-22.19,1-33.26s1.34-22.33,3.08-33.33c3.73-23.64,9.08-46.91,17.28-69.49,6.38-17.55,14.11-34.47,24.38-50C289.67,82.65,299.1,71.3,308.19,59.22ZM700.24,499.83c10.77-18.91,22-37.11,31.73-56.08,11.38-22.2,22.22-44.74,31.86-67.73,9.48-22.6,17.61-45.8,25.51-69,11.83-34.73,20.57-70.24,24.87-106.78,2.18-18.52,3.51-36.93,2.11-55.65-1.44-19.21-8.43-35.24-21.87-48.84C782.51,83.65,770,72.31,755.78,62.92A212.92,212.92,0,0,0,697.92,36.1c-20.15-5.88-40.73-9.82-61.75-9.89-18.33-.06-36.7.83-55,2-8.61.55-17.12,2.77-27,4.47,2.89,1.56,4.5,2.55,6.2,3.34A258.9,258.9,0,0,1,627,80.42a312.5,312.5,0,0,1,44,49.42,329,329,0,0,1,38.64,70.07,109.5,109.5,0,0,1,7.33,27.16c1.08,9.26.13,18.85-.79,28.22-1.64,16.76-3.5,33.54-6.08,50.18-2.27,14.66-1.95,29.26-.66,43.86,1.15,13,3.67,25.93,4.7,39,1,12.36,1.7,24.88.89,37.22A186.92,186.92,0,0,1,709,462.1c-3.08,11.34-8.51,22-13.17,33.68Zm-347,16.78c5.28-14.76,10-28.92,15.4-42.81,5.72-14.7,12.18-29.11,18.12-43.72A164.46,164.46,0,0,0,398.3,374.3c.64-16.46-.43-33.07-2-49.49-1.26-13.26-4.33-26.35-6.73-39.49-1.68-9.2-4.25-18.07-10.4-25.47-11.46-13.79-27.28-15.6-43.17-13.63A161.75,161.75,0,0,0,298,256.15c-11.75,4.55-22.57,11.53-33.64,17.74-1.37.77-2.51,3.35-2.44,5,.41,10.7,1.7,21.38,1.75,32.07.08,17.74-.5,35.48-.92,53.22-.11,4.43-.62,8.86-1,13.28-1.33,14.29-4.78,28.28-3.18,43,1.55,14.15,4.75,27.62,11,40.28A102.38,102.38,0,0,0,302.86,500,91.18,91.18,0,0,0,353.25,516.61ZM691.91,241.82c-11.53,0-21.75.07-32,0a83.6,83.6,0,0,0-29.83,4.95c-11.38,4.16-19.54,11.45-23.34,23.15s-3.32,23.85-1.22,35.67c4.31,24.32,12.75,47.43,23.7,69.46,11.69,23.53,24.48,46.5,36.63,69.8,4.25,8.16,8,16.57,12.24,25.35,1-1.17,1.79-1.68,2-2.37,2.75-9.5,6-18.91,7.92-28.58a96.7,96.7,0,0,0,2-23.5c-.66-14.23-2.41-28.42-3.76-42.63-.7-7.34-1.66-14.66-2.25-22-.71-8.86-1.58-17.74-1.58-26.61,0-7,1-14.07,1.88-21.07,1.34-10.86,3-21.68,4.39-32.54C689.81,261.78,690.71,252.67,691.91,241.82ZM274.1,612.41a20.81,20.81,0,0,0,2.47,1.94c18.87,9.1,38.73,11.85,59.53,10.2a95.88,95.88,0,0,0,38.66-11.22c13.34-7.22,24-17.64,32.71-29.86,7.19-10.06-.31-26.55-9.15-32.1-8.6-5.39-14.23-5.38-20.44,1.46-5.71,6.3-10.57,13.38-16.35,19.61-6.32,6.82-12.53,14.15-20.12,19.3-13,8.81-28.57,11.32-43.66,14.72C290.11,608.18,282.55,610.27,274.1,612.41Zm539.15-60.84a28.84,28.84,0,0,0-3.36,0c-12.55,1.94-25,4.57-37.67,5.68-10.94,1-22,.39-33,.15-14.12-.3-27.35-3.85-39.31-11.68a7.5,7.5,0,0,0-5-1,72.7,72.7,0,0,0-8.82,2.7c-6.68,2.14-11.66,6.31-13.28,13.2-1.38,5.84-1.66,11.93-2.53,17.9-.47,3.23,1,5.24,3.92,5.8,7.82,1.51,15.65,3.35,23.56,3.91a117.3,117.3,0,0,0,21.74-.92c12.15-1.42,24.41-2.64,36.3-5.37C777.2,577.05,796,566.5,813.25,551.57Z"/><path d="M347.46,260.81c8.48-.3,16.43,1.24,23.78,5.84,6.61,4.15,7.49,10.07,2.18,15.86-16.41,17.88-38.27,6.64-44.21-9.67-1.26-3.47-.74-6.67,3-8.18,4.84-2,9.85-3.53,14.78-5.26C347.14,259.87,347.3,260.34,347.46,260.81Z"/><path d="M650.05,253.11c4.48,1,8.36,1.58,12,2.8a7.15,7.15,0,0,1,3.75,10.74c-5.14,7.46-11.51,13.41-21.13,14.05-7.27.49-17-4.4-20.68-11.75-1.81-3.63,1.41-9,7.21-11C637.47,255.87,644,254.63,650.05,253.11Z"/></symbol>
+<symbol id="architecture-logo-playwright" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
+<path d="M136.444 221.556C123.558 225.213 115.104 231.625 109.535 238.032C114.869 233.364 122.014 229.08 131.652 226.348C141.51 223.554 149.92 223.574 156.869 224.915V219.481C150.941 218.939 144.145 219.371 136.444 221.556ZM108.946 175.876L61.0895 188.484C61.0895 188.484 61.9617 189.716 63.5767 191.36L104.153 180.668C104.153 180.668 103.578 188.077 98.5847 194.705C108.03 187.559 108.946 175.876 108.946 175.876ZM149.005 288.347C81.6582 306.486 46.0272 228.438 35.2396 187.928C30.2556 169.229 28.0799 155.067 27.5 145.928C27.4377 144.979 27.4665 144.179 27.5336 143.446C24.04 143.657 22.3674 145.473 22.7077 150.721C23.2876 159.855 25.4633 174.016 30.4473 192.721C41.2301 233.225 76.8659 311.273 144.213 293.134C158.872 289.185 169.885 281.992 178.152 272.81C170.532 279.692 160.995 285.112 149.005 288.347ZM161.661 128.11V132.903H188.077C187.535 131.206 186.989 129.677 186.447 128.11H161.661Z" fill="#2D4552"/>
+<path d="M193.981 167.584C205.861 170.958 212.144 179.287 215.465 186.658L228.711 190.42C228.711 190.42 226.904 164.623 203.57 157.995C181.741 151.793 168.308 170.124 166.674 172.496C173.024 167.972 182.297 164.268 193.981 167.584ZM299.422 186.777C277.573 180.547 264.145 198.916 262.535 201.255C268.89 196.736 278.158 193.031 289.837 196.362C301.698 199.741 307.976 208.06 311.307 215.436L324.572 219.212C324.572 219.212 322.736 193.41 299.422 186.777ZM286.262 254.795L176.072 223.99C176.072 223.99 177.265 230.038 181.842 237.869L274.617 263.805C282.255 259.386 286.262 254.795 286.262 254.795ZM209.867 321.102C122.618 297.71 133.166 186.543 147.284 133.865C153.097 112.156 159.073 96.0203 164.029 85.204C161.072 84.5953 158.623 86.1529 156.203 91.0746C150.941 101.747 144.212 119.124 137.7 143.45C123.586 196.127 113.038 307.29 200.283 330.682C241.406 341.699 273.442 324.955 297.323 298.659C274.655 319.19 245.714 330.701 209.867 321.102Z" fill="#2D4552"/>
+<path d="M161.661 262.296V239.863L99.3324 257.537C99.3324 257.537 103.938 230.777 136.444 221.556C146.302 218.762 154.713 218.781 161.661 220.123V128.11H192.869C189.471 117.61 186.184 109.526 183.423 103.909C178.856 94.612 174.174 100.775 163.545 109.665C156.059 115.919 137.139 129.261 108.668 136.933C80.1966 144.61 57.179 142.574 47.5752 140.911C33.9601 138.562 26.8387 135.572 27.5049 145.928C28.0847 155.062 30.2605 169.224 35.2445 187.928C46.0272 228.433 81.663 306.481 149.01 288.342C166.602 283.602 179.019 274.233 187.626 262.291H161.661V262.296ZM61.0848 188.484L108.946 175.876C108.946 175.876 107.551 194.288 89.6087 199.018C71.6614 203.743 61.0848 188.484 61.0848 188.484Z" fill="#E2574C"/>
+<path d="M341.786 129.174C329.345 131.355 299.498 134.072 262.612 124.185C225.716 114.304 201.236 97.0224 191.537 88.8994C177.788 77.3834 171.74 69.3802 165.788 81.4857C160.526 92.163 153.797 109.54 147.284 133.866C133.171 186.543 122.623 297.706 209.867 321.098C297.093 344.47 343.53 242.92 357.644 190.238C364.157 165.917 367.013 147.5 367.799 135.625C368.695 122.173 359.455 126.078 341.786 129.174ZM166.497 172.756C166.497 172.756 180.246 151.372 203.565 158C226.899 164.628 228.706 190.425 228.706 190.425L166.497 172.756ZM223.42 268.713C182.403 256.698 176.077 223.99 176.077 223.99L286.262 254.796C286.262 254.791 264.021 280.578 223.42 268.713ZM262.377 201.495C262.377 201.495 276.107 180.126 299.422 186.773C322.736 193.411 324.572 219.208 324.572 219.208L262.377 201.495Z" fill="#2EAD33"/>
+<path d="M139.88 246.04L99.3324 257.532C99.3324 257.532 103.737 232.44 133.607 222.496L110.647 136.33L108.663 136.933C80.1918 144.611 57.1742 142.574 47.5704 140.911C33.9554 138.563 26.834 135.572 27.5001 145.929C28.08 155.063 30.2557 169.224 35.2397 187.929C46.0225 228.433 81.6583 306.481 149.005 288.342L150.989 287.719L139.88 246.04ZM61.0848 188.485L108.946 175.876C108.946 175.876 107.551 194.288 89.6087 199.018C71.6615 203.743 61.0848 188.485 61.0848 188.485Z" fill="#D65348"/>
+<path d="M225.27 269.163L223.415 268.712C182.398 256.698 176.072 223.99 176.072 223.99L232.89 239.872L262.971 124.281L262.607 124.185C225.711 114.304 201.232 97.0224 191.532 88.8994C177.783 77.3834 171.735 69.3802 165.783 81.4857C160.526 92.163 153.797 109.54 147.284 133.866C133.171 186.543 122.623 297.706 209.867 321.097L211.655 321.5L225.27 269.163ZM166.497 172.756C166.497 172.756 180.246 151.372 203.565 158C226.899 164.628 228.706 190.425 228.706 190.425L166.497 172.756Z" fill="#1D8D22"/>
+<path d="M141.946 245.451L131.072 248.537C133.641 263.019 138.169 276.917 145.276 289.195C146.513 288.922 147.74 288.687 149 288.342C152.302 287.451 155.364 286.348 158.312 285.145C150.371 273.361 145.118 259.789 141.946 245.451ZM137.7 143.451C132.112 164.307 127.113 194.326 128.489 224.436C130.952 223.367 133.554 222.371 136.444 221.551L138.457 221.101C136.003 188.939 141.308 156.165 147.284 133.866C148.799 128.225 150.318 122.978 151.832 118.085C149.393 119.637 146.767 121.228 143.776 122.867C141.759 129.093 139.722 135.898 137.7 143.451Z" fill="#C04B41"/>
+</symbol>
+  </defs>
+  <rect width="1680" height="1240" fill="#fffdfa" />
+  <text data-canvas-title="true" data-geometry-owner="canvas-title" x="40" y="58" font-size="30" font-weight="650" fill="#171717">How one TrialRun review moves</text>
+  <text data-canvas-subtitle="true" data-geometry-owner="canvas-subtitle" x="40" y="89" font-size="14" fill="#67635f">One selected Codex connection → one isolated review project → recorded proof → exact teardown.</text>
+  <g data-zone-id="github-zone">
+        <rect x="40" y="140" width="300" height="890" rx="16" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+        <text data-zone-text="title" data-geometry-owner="zone:github-zone" x="58" y="169" font-size="18" font-weight="650" fill="#171717">GitHub</text>
+        <text data-zone-text="subtitle" data-geometry-owner="zone:github-zone" x="58" y="190" font-size="12" fill="#67635f">source, trigger, published proof</text>
+      </g>
+<g data-zone-id="control-zone">
+        <rect x="380" y="140" width="600" height="890" rx="16" fill="#eef0ff" stroke="#6176ff" stroke-width="1.5" />
+        <text data-zone-text="title" data-geometry-owner="zone:control-zone" x="398" y="169" font-size="18" font-weight="650" fill="#171717">Persistent TrialRun project on Zerops</text>
+        <text data-zone-text="subtitle" data-geometry-owner="zone:control-zone" x="398" y="190" font-size="12" fill="#67635f">always on; shared control plane</text>
+      </g>
+<g data-zone-id="zcp-zone">
+        <rect x="1020" y="140" width="620" height="250" rx="16" fill="#fff0f7" stroke="#ff5eaa" stroke-width="1.5" />
+        <text data-zone-text="title" data-geometry-owner="zone:zcp-zone" x="1038" y="169" font-size="18" font-weight="650" fill="#171717">Optional customer ZCP workspace</text>
+        <text data-zone-text="subtitle" data-geometry-owner="zone:zcp-zone" x="1038" y="190" font-size="12" fill="#67635f">one private Codex home per customer</text>
+      </g>
+<g data-zone-id="review-zone">
+        <rect x="1020" y="430" width="620" height="600" rx="16" fill="#f6f4f1" stroke="#171717" stroke-width="1.5" />
+        <text data-zone-text="title" data-geometry-owner="zone:review-zone" x="1038" y="459" font-size="18" font-weight="650" fill="#171717">Disposable Zerops project for one review</text>
+        <text data-zone-text="subtitle" data-geometry-owner="zone:review-zone" x="1038" y="480" font-size="12" fill="#67635f">private network; base and PR state stay separate</text>
+      </g>
+  <g data-connector-id="repo-to-app" data-connector-mode="data">
+      <path d="M 190 340 L 190 430" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+      <g data-connector-label="repo-to-app" data-geometry-owner="connector:repo-to-app">
+          <rect x="105" y="365" width="170" height="28" rx="7" fill="#fffdfa" stroke="#67635f" stroke-width="1" />
+          <text x="190" y="383" text-anchor="middle" font-size="11" font-weight="600" fill="#67635f">pull_request webhook</text>
+        </g>
+    </g>
+<g data-connector-id="app-to-runner" data-connector-mode="active">
+      <path d="M 310 485 L 360 485 L 360 585 L 420 585" fill="none" stroke="#171717" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
+      <g data-connector-label="app-to-runner" data-geometry-owner="connector:app-to-runner">
+          <rect x="170" y="575" width="150" height="28" rx="7" fill="#fffdfa" stroke="#171717" stroke-width="1" />
+          <text x="245" y="593" text-anchor="middle" font-size="11" font-weight="600" fill="#171717">installation token</text>
+        </g>
+    </g>
+<g data-connector-id="web-to-runner" data-connector-mode="data">
+      <path d="M 530 340 L 530 530" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+      <g data-connector-label="web-to-runner" data-geometry-owner="connector:web-to-runner">
+          <rect x="545" y="410" width="118" height="28" rx="7" fill="#fffdfa" stroke="#67635f" stroke-width="1" />
+          <text x="604" y="428" text-anchor="middle" font-size="11" font-weight="600" fill="#67635f">approve + run</text>
+        </g>
+    </g>
+<g data-connector-id="runner-to-selector" data-connector-mode="data">
+      <path d="M 660 530 L 660 285 L 700 285" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="selector-managed" data-connector-mode="active">
+      <path d="M 820 340 L 820 390" fill="none" stroke="#171717" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
+      <g data-connector-label="selector-managed" data-geometry-owner="connector:selector-managed">
+          <rect x="830" y="351" width="76" height="28" rx="7" fill="#fffdfa" stroke="#171717" stroke-width="1" />
+          <text x="868" y="369" text-anchor="middle" font-size="11" font-weight="600" fill="#171717">default</text>
+        </g>
+    </g>
+<g data-connector-id="selector-zcp" data-connector-mode="optional">
+      <path d="M 940 285 L 1070 285" fill="none" stroke="#ff5eaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-optional)" stroke-dasharray="8 7" />
+      <g data-connector-label="selector-zcp" data-geometry-owner="connector:selector-zcp">
+          <rect x="966" y="244" width="84" height="28" rx="7" fill="#fffdfa" stroke="#ff5eaa" stroke-width="1" />
+          <text x="1008" y="262" text-anchor="middle" font-size="11" font-weight="600" fill="#ff5eaa">optional</text>
+        </g>
+    </g>
+<g data-connector-id="runner-to-project" data-connector-mode="active">
+      <path d="M 940 560 L 1000 560 L 1060 560" fill="none" stroke="#171717" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
+      <g data-connector-label="runner-to-project" data-geometry-owner="connector:runner-to-project">
+          <rect x="958" y="525" width="60" height="28" rx="7" fill="#fffdfa" stroke="#171717" stroke-width="1" />
+          <text x="988" y="543" text-anchor="middle" font-size="11" font-weight="600" fill="#171717">deploy</text>
+        </g>
+    </g>
+<g data-connector-id="project-to-runner-teardown" data-connector-mode="teardown">
+      <path d="M 1060 595 L 1000 595 L 1000 645 L 940 645" fill="none" stroke="#e34b4b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-teardown)" stroke-dasharray="5 5" />
+      <g data-connector-label="project-to-runner-teardown" data-geometry-owner="connector:project-to-runner-teardown">
+          <rect x="946" y="610" width="72" height="28" rx="7" fill="#fffdfa" stroke="#e34b4b" stroke-width="1" />
+          <text x="982" y="628" text-anchor="middle" font-size="11" font-weight="600" fill="#e34b4b">teardown</text>
+        </g>
+    </g>
+<g data-connector-id="runner-to-postgres" data-connector-mode="data">
+      <path d="M 535 670 L 535 790" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+      <g data-connector-label="runner-to-postgres" data-geometry-owner="connector:runner-to-postgres">
+          <rect x="550" y="711" width="116" height="28" rx="7" fill="#fffdfa" stroke="#67635f" stroke-width="1" />
+          <text x="608" y="729" text-anchor="middle" font-size="11" font-weight="600" fill="#67635f">jobs + events</text>
+        </g>
+    </g>
+<g data-connector-id="runner-to-storage" data-connector-mode="data">
+      <path d="M 825 670 L 825 790" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+      <g data-connector-label="runner-to-storage" data-geometry-owner="connector:runner-to-storage">
+          <rect x="840" y="711" width="142" height="28" rx="7" fill="#fffdfa" stroke="#67635f" stroke-width="1" />
+          <text x="911" y="729" text-anchor="middle" font-size="11" font-weight="600" fill="#67635f">artifact metadata</text>
+        </g>
+    </g>
+<g data-connector-id="project-to-base" data-connector-mode="data">
+      <path d="M 1175 620 L 1175 680" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="project-to-head" data-connector-mode="data">
+      <path d="M 1485 620 L 1485 680" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="base-to-deps" data-connector-mode="data">
+      <path d="M 1175 770 L 1175 820" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="head-to-deps" data-connector-mode="data">
+      <path d="M 1485 770 L 1485 820" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="managed-to-chrome" data-connector-mode="active">
+      <path d="M 940 435 L 990 435 L 990 970 L 1180 970" fill="none" stroke="#171717" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
+      <g data-connector-label="managed-to-chrome" data-geometry-owner="connector:managed-to-chrome">
+          <rect x="835" y="1070" width="144" height="28" rx="7" fill="#fffdfa" stroke="#171717" stroke-width="1" />
+          <text x="907" y="1088" text-anchor="middle" font-size="11" font-weight="600" fill="#171717">live review tools</text>
+        </g>
+    </g>
+<g data-connector-id="zcp-to-chrome" data-connector-mode="optional">
+      <path d="M 1590 280 L 1650 280 L 1650 970 L 1480 970" fill="none" stroke="#ff5eaa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-optional)" stroke-dasharray="8 7" />
+      <g data-connector-label="zcp-to-chrome" data-geometry-owner="connector:zcp-to-chrome">
+          <rect x="1435" y="1070" width="190" height="28" rx="7" fill="#fffdfa" stroke="#ff5eaa" stroke-width="1" />
+          <text x="1530" y="1088" text-anchor="middle" font-size="11" font-weight="600" fill="#ff5eaa">same tools when selected</text>
+        </g>
+    </g>
+<g data-connector-id="chrome-to-base" data-connector-mode="data">
+      <path d="M 1240 930 L 1240 915 L 1035 915 L 1035 725 L 1060 725" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="chrome-to-head" data-connector-mode="data">
+      <path d="M 1420 930 L 1420 915 L 1620 915 L 1620 725 L 1600 725" fill="none" stroke="#67635f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-data)" />
+    </g>
+<g data-connector-id="chrome-to-storage" data-connector-mode="evidence">
+      <path d="M 1180 995 L 1010 995 L 1010 930 L 850 930 L 850 900" fill="none" stroke="#47c5e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-evidence)" />
+      <g data-connector-label="chrome-to-storage" data-geometry-owner="connector:chrome-to-storage">
+          <rect x="855" y="932" width="122" height="28" rx="7" fill="#fffdfa" stroke="#47c5e8" stroke-width="1" />
+          <text x="916" y="950" text-anchor="middle" font-size="11" font-weight="600" fill="#47c5e8">recorded proof</text>
+        </g>
+    </g>
+<g data-connector-id="runner-to-github-evidence" data-connector-mode="evidence">
+      <path d="M 420 625 L 350 625 L 350 800 L 310 800" fill="none" stroke="#47c5e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-evidence)" />
+      <g data-connector-label="runner-to-github-evidence" data-geometry-owner="connector:runner-to-github-evidence">
+          <rect x="282" y="676" width="176" height="28" rx="7" fill="#fffdfa" stroke="#47c5e8" stroke-width="1" />
+          <text x="370" y="694" text-anchor="middle" font-size="11" font-weight="600" fill="#47c5e8">publish verdict + links</text>
+        </g>
+    </g>
+<g data-connector-id="storage-to-github-evidence" data-connector-mode="evidence">
+      <path d="M 710 870 L 680 870 L 680 950 L 350 950 L 350 850 L 310 850" fill="none" stroke="#47c5e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-evidence)" />
+      <g data-connector-label="storage-to-github-evidence" data-geometry-owner="connector:storage-to-github-evidence">
+          <rect x="452" y="912" width="160" height="28" rx="7" fill="#fffdfa" stroke="#47c5e8" stroke-width="1" />
+          <text x="532" y="930" text-anchor="middle" font-size="11" font-weight="600" fill="#47c5e8">signed evidence URLs</text>
+        </g>
+    </g>
+  <g data-node-id="github-repo">
+      <rect x="70" y="230" width="240" height="110" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="github" data-geometry-owner="node:github-repo">
+        <rect x="88" y="247" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-github" x="88" y="247" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:github-repo" x="134" y="265" font-size="15" font-weight="650" fill="#171717">Pull request</text>
+      <text data-node-text="detail" data-geometry-owner="node:github-repo" x="88" y="291" font-size="12" fill="#67635f">exact base SHA</text>
+<text data-node-text="detail" data-geometry-owner="node:github-repo" x="88" y="308" font-size="12" fill="#67635f">exact PR SHA</text>
+    </g>
+<g data-node-id="github-app">
+      <rect x="70" y="430" width="240" height="110" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="trialrun" data-geometry-owner="node:github-app">
+        <rect x="88" y="447" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-trialrun" x="88" y="447" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:github-app" x="134" y="465" font-size="15" font-weight="650" fill="#171717">GitHub App</text>
+      <text data-node-text="detail" data-geometry-owner="node:github-app" x="88" y="491" font-size="12" fill="#67635f">signed webhook</text>
+<text data-node-text="detail" data-geometry-owner="node:github-app" x="88" y="508" font-size="12" fill="#67635f">least-privilege install</text>
+    </g>
+<g data-node-id="github-evidence">
+      <rect x="70" y="760" width="240" height="130" rx="9" fill="#ecfbff" stroke="#47c5e8" stroke-width="1.5" />
+      <g data-logo-asset="github" data-geometry-owner="node:github-evidence">
+        <rect x="88" y="777" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-github" x="88" y="777" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:github-evidence" x="134" y="795" font-size="15" font-weight="650" fill="#171717">Published proof</text>
+      <text data-node-text="detail" data-geometry-owner="node:github-evidence" x="88" y="821" font-size="12" fill="#67635f">verdict + code lines</text>
+<text data-node-text="detail" data-geometry-owner="node:github-evidence" x="88" y="838" font-size="12" fill="#67635f">video and artifact links</text>
+<text data-node-text="detail" data-geometry-owner="node:github-evidence" x="88" y="855" font-size="12" fill="#67635f">teardown status</text>
+    </g>
+<g data-node-id="web">
+      <rect x="420" y="230" width="220" height="110" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="trialrun" data-geometry-owner="node:web">
+        <rect x="438" y="247" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-trialrun" x="438" y="247" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:web" x="484" y="265" font-size="15" font-weight="650" fill="#171717">Web + API</text>
+      <text data-node-text="detail" data-geometry-owner="node:web" x="438" y="291" font-size="12" fill="#67635f">accounts and setup</text>
+<text data-node-text="detail" data-geometry-owner="node:web" x="438" y="308" font-size="12" fill="#67635f">review and evidence UI</text>
+    </g>
+<g data-node-id="connection-selector">
+      <rect x="700" y="230" width="240" height="110" rx="9" fill="#eef0ff" stroke="#6176ff" stroke-width="1.5" />
+      <g data-logo-asset="codex" data-geometry-owner="node:connection-selector">
+        <rect x="718" y="247" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-codex" x="718" y="247" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:connection-selector" x="764" y="265" font-size="15" font-weight="650" fill="#171717">Codex choice</text>
+      <text data-node-text="detail" data-geometry-owner="node:connection-selector" x="718" y="291" font-size="12" fill="#67635f">one connection per job</text>
+<text data-node-text="detail" data-geometry-owner="node:connection-selector" x="718" y="308" font-size="12" fill="#67635f">managed is default</text>
+<text data-node-text="detail" data-geometry-owner="node:connection-selector" x="718" y="325" font-size="12" fill="#67635f">ZCP is optional</text>
+    </g>
+<g data-node-id="managed-codex">
+      <rect x="700" y="390" width="240" height="90" rx="9" fill="#f3ffe3" stroke="#b9ff54" stroke-width="1.5" />
+      <g data-logo-asset="codex" data-geometry-owner="node:managed-codex">
+        <rect x="718" y="407" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-codex" x="718" y="407" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:managed-codex" x="764" y="425" font-size="15" font-weight="650" fill="#171717">Managed Codex</text>
+      <text data-node-text="detail" data-geometry-owner="node:managed-codex" x="718" y="451" font-size="12" fill="#67635f">active default path</text>
+    </g>
+<g data-node-id="runner">
+      <rect x="420" y="530" width="520" height="140" rx="9" fill="#eef0ff" stroke="#6176ff" stroke-width="1.5" />
+      <g data-logo-asset="zerops" data-geometry-owner="node:runner">
+        <rect x="438" y="547" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-zerops" x="438" y="547" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:runner" x="484" y="565" font-size="15" font-weight="650" fill="#171717">Runner + durable queue</text>
+      <text data-node-text="detail" data-geometry-owner="node:runner" x="438" y="591" font-size="12" fill="#67635f">checks the run plan and exact SHAs</text>
+<text data-node-text="detail" data-geometry-owner="node:runner" x="438" y="608" font-size="12" fill="#67635f">creates, watches, publishes, deletes</text>
+<text data-node-text="detail" data-geometry-owner="node:runner" x="438" y="625" font-size="12" fill="#67635f">the model never holds Zerops or GitHub credentials</text>
+    </g>
+<g data-node-id="postgres">
+      <rect x="420" y="790" width="230" height="110" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="postgresql" data-geometry-owner="node:postgres">
+        <rect x="438" y="807" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-postgresql" x="438" y="807" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:postgres" x="484" y="825" font-size="15" font-weight="650" fill="#171717">PostgreSQL</text>
+      <text data-node-text="detail" data-geometry-owner="node:postgres" x="438" y="851" font-size="12" fill="#67635f">jobs and events</text>
+<text data-node-text="detail" data-geometry-owner="node:postgres" x="438" y="868" font-size="12" fill="#67635f">connection ID + project ID</text>
+    </g>
+<g data-node-id="object-storage">
+      <rect x="710" y="790" width="230" height="110" rx="9" fill="#ecfbff" stroke="#47c5e8" stroke-width="1.5" />
+      <g data-logo-asset="zerops" data-geometry-owner="node:object-storage">
+        <rect x="728" y="807" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-zerops" x="728" y="807" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:object-storage" x="774" y="825" font-size="15" font-weight="650" fill="#171717">Object storage</text>
+      <text data-node-text="detail" data-geometry-owner="node:object-storage" x="728" y="851" font-size="12" fill="#67635f">video, screenshots, trace</text>
+<text data-node-text="detail" data-geometry-owner="node:object-storage" x="728" y="868" font-size="12" fill="#67635f">SHA-256 artifact hashes</text>
+    </g>
+<g data-node-id="zcp-codex">
+      <rect x="1070" y="230" width="520" height="100" rx="9" fill="#fff0f7" stroke="#ff5eaa" stroke-width="1.5" />
+      <g data-logo-asset="codex" data-geometry-owner="node:zcp-codex">
+        <rect x="1088" y="247" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-codex" x="1088" y="247" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:zcp-codex" x="1134" y="265" font-size="15" font-weight="650" fill="#171717">Customer&apos;s Codex subscription</text>
+      <text data-node-text="detail" data-geometry-owner="node:zcp-codex" x="1088" y="291" font-size="12" fill="#67635f">device login stays inside ZCP</text>
+<text data-node-text="detail" data-geometry-owner="node:zcp-codex" x="1088" y="308" font-size="12" fill="#67635f">same bounded TrialRun tools</text>
+    </g>
+<g data-node-id="project-control">
+      <rect x="1060" y="520" width="540" height="100" rx="9" fill="#f6f4f1" stroke="#171717" stroke-width="1.5" />
+      <g data-logo-asset="zerops" data-geometry-owner="node:project-control">
+        <rect x="1078" y="537" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-zerops" x="1078" y="537" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:project-control" x="1124" y="555" font-size="15" font-weight="650" fill="#171717">One exact review project ID</text>
+      <text data-node-text="detail" data-geometry-owner="node:project-control" x="1078" y="581" font-size="12" fill="#67635f">created and saved before deployment</text>
+<text data-node-text="detail" data-geometry-owner="node:project-control" x="1078" y="598" font-size="12" fill="#67635f">deleted in finally; absence is checked</text>
+    </g>
+<g data-node-id="base-app">
+      <rect x="1060" y="680" width="230" height="90" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="trialrun" data-geometry-owner="node:base-app">
+        <rect x="1078" y="697" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-trialrun" x="1078" y="697" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:base-app" x="1124" y="715" font-size="15" font-weight="650" fill="#171717">Base app</text>
+      <text data-node-text="detail" data-geometry-owner="node:base-app" x="1078" y="741" font-size="12" fill="#67635f">immutable base SHA</text>
+    </g>
+<g data-node-id="head-app">
+      <rect x="1370" y="680" width="230" height="90" rx="9" fill="#f3ffe3" stroke="#b9ff54" stroke-width="1.5" />
+      <g data-logo-asset="trialrun" data-geometry-owner="node:head-app">
+        <rect x="1388" y="697" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-trialrun" x="1388" y="697" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:head-app" x="1434" y="715" font-size="15" font-weight="650" fill="#171717">PR app</text>
+      <text data-node-text="detail" data-geometry-owner="node:head-app" x="1388" y="741" font-size="12" fill="#67635f">immutable PR SHA</text>
+    </g>
+<g data-node-id="base-deps">
+      <rect x="1060" y="820" width="230" height="80" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="zerops" data-geometry-owner="node:base-deps">
+        <rect x="1078" y="837" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-zerops" x="1078" y="837" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:base-deps" x="1124" y="855" font-size="15" font-weight="650" fill="#171717">Base data</text>
+      <text data-node-text="detail" data-geometry-owner="node:base-deps" x="1078" y="881" font-size="12" fill="#67635f">private, isolated state</text>
+    </g>
+<g data-node-id="head-deps">
+      <rect x="1370" y="820" width="230" height="80" rx="9" fill="#fffdfa" stroke="#d8d4ce" stroke-width="1.5" />
+      <g data-logo-asset="zerops" data-geometry-owner="node:head-deps">
+        <rect x="1388" y="837" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-zerops" x="1388" y="837" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:head-deps" x="1434" y="855" font-size="15" font-weight="650" fill="#171717">PR data</text>
+      <text data-node-text="detail" data-geometry-owner="node:head-deps" x="1388" y="881" font-size="12" fill="#67635f">private, isolated state</text>
+    </g>
+<g data-node-id="chrome">
+      <rect x="1180" y="930" width="300" height="80" rx="9" fill="#ecfbff" stroke="#47c5e8" stroke-width="1.5" />
+      <g data-logo-asset="playwright" data-geometry-owner="node:chrome">
+        <rect x="1198" y="947" width="34" height="26" fill="transparent" />
+        <use href="#architecture-logo-playwright" x="1198" y="947" width="34" height="26" />
+      </g>
+      <text data-node-text="title" data-geometry-owner="node:chrome" x="1244" y="965" font-size="15" font-weight="650" fill="#171717">Chrome executor</text>
+      <text data-node-text="detail" data-geometry-owner="node:chrome" x="1198" y="991" font-size="12" fill="#67635f">live tools + secret-safe recording</text>
+    </g>
+  <text data-footer-text="exclusive-route" data-geometry-owner="footer" x="40" y="1168" font-size="13" font-weight="650" fill="#171717">Exactly one Codex connection is pinned to each job. Managed runs now; ZCP can replace it per customer.</text>
+  <g data-legend="true" data-geometry-owner="legend" transform="translate(40 1200)">
+    <line x1="0" y1="0" x2="34" y2="0" stroke="#171717" stroke-width="2" /><text x="44" y="4" font-size="12" fill="#67635f">active/default</text>
+    <line x1="180" y1="0" x2="214" y2="0" stroke="#ff5eaa" stroke-width="2" stroke-dasharray="8 7" /><text x="224" y="4" font-size="12" fill="#67635f">optional alternative</text>
+    <line x1="430" y1="0" x2="464" y2="0" stroke="#47c5e8" stroke-width="2" /><text x="474" y="4" font-size="12" fill="#67635f">evidence</text>
+    <line x1="590" y1="0" x2="624" y2="0" stroke="#e34b4b" stroke-width="2" stroke-dasharray="5 5" /><text x="634" y="4" font-size="12" fill="#67635f">verified teardown</text>
+  </g>
+</svg>

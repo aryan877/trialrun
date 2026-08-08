@@ -3,6 +3,7 @@ import "server-only";
 import { and, desc, eq, isNull, notInArray } from "drizzle-orm";
 
 import {
+  agentConnections,
   githubInstallations,
   jobs,
   repositories,
@@ -93,6 +94,20 @@ export async function enqueuePullRequestReview(input: {
     if (!recipe?.approvedRecipe) {
       throw new Error("Confirm the repository infrastructure recipe before running a PR.");
     }
+    const [agentConnection] = await tx
+      .select({ id: agentConnections.id })
+      .from(agentConnections)
+      .where(
+        and(
+          eq(agentConnections.userId, input.source.installation.ownerUserId),
+          eq(agentConnections.provider, "openai"),
+          eq(agentConnections.status, "connected"),
+        ),
+      )
+      .limit(1);
+    if (!agentConnection) {
+      throw new Error("Choose a connected Codex option before running a pull request review.");
+    }
     const [review] = await tx
       .insert(reviews)
       .values({
@@ -104,6 +119,7 @@ export async function enqueuePullRequestReview(input: {
         baseSha: input.baseSha,
         headSha: input.headSha,
         provider: serverEnv().EXECUTION_PROVIDER,
+        agentConnectionId: agentConnection.id,
       })
       .returning();
     if (!review) throw new Error("Pull request review was not persisted.");

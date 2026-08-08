@@ -73,28 +73,28 @@ function RepositoryReadiness({
   if (analysis?.status === "queued") {
     return (
       <StateBadge icon={CircleDashed} tone="info">
-        Analysis queued
+        Setup check queued
       </StateBadge>
     );
   }
   if (analysis?.status === "running") {
     return (
       <StateBadge icon={Activity} tone="running">
-        Analyzing
+        Checking setup
       </StateBadge>
     );
   }
   if (recipe?.status === "confirmed") {
     return (
       <StateBadge icon={Check} tone="success">
-        Recipe confirmed
+        Setup approved
       </StateBadge>
     );
   }
   if (recipe?.status === "proposed") {
     return (
       <StateBadge icon={TriangleAlert} tone="warning">
-        Confirmation needed
+        Approval needed
       </StateBadge>
     );
   }
@@ -105,7 +105,7 @@ function RepositoryReadiness({
       </StateBadge>
     );
   }
-  return <StateBadge icon={CircleDashed}>Not analyzed</StateBadge>;
+  return <StateBadge icon={CircleDashed}>Setup check needed</StateBadge>;
 }
 
 function dashboardNotice(query: Record<string, string | string[] | undefined>): {
@@ -136,17 +136,17 @@ function dashboardNotice(query: Record<string, string | string[] | undefined>): 
     return {
       tone: "error",
       message:
-        "The review could not be queued. Confirm the recipe and choose an open, review-ready pull request.",
+        "The review could not be queued. Approve the repository setup and choose an open, review-ready pull request.",
     };
   }
   if (error === "logout") {
     return { tone: "error", message: "The session could not be closed. Refresh and try again." };
   }
   if (error === "analysis") {
-    return { tone: "error", message: "Repository analysis could not be queued." };
+    return { tone: "error", message: "The setup check could not be queued." };
   }
   if (error === "confirmation") {
-    return { tone: "error", message: "The repository recipe could not be confirmed." };
+    return { tone: "error", message: "The repository setup could not be approved." };
   }
   return null;
 }
@@ -251,7 +251,7 @@ export default async function Dashboard({ searchParams }: { readonly searchParam
             </a>
           </Button>
         }
-        description="Connected repositories, recipe readiness, and immutable base-versus-PR reviews."
+        description="Connected repositories, setup readiness, and immutable base-versus-PR reviews."
         eyebrow="Control plane"
         title="Workspace"
       />
@@ -281,7 +281,7 @@ export default async function Dashboard({ searchParams }: { readonly searchParam
 
         <section aria-labelledby="repositories" className="space-y-4">
           <SectionHeading
-            description="Each repository needs an analyzed and maintainer-confirmed infrastructure recipe before a review can run."
+            description="Run a setup check, review how TrialRun will run the repository, and approve it before starting a review."
             id="repositories"
             title="Connected repositories"
           />
@@ -359,7 +359,7 @@ export default async function Dashboard({ searchParams }: { readonly searchParam
                 description={
                   cursor
                     ? "There are no older reviews before this cursor. Return to the latest results."
-                    : "Queue an open, review-ready pull request after confirming its repository recipe."
+                    : "Queue an open, review-ready pull request after approving its repository setup."
                 }
                 href={cursor ? "/app#reviews" : undefined}
                 actionLabel={cursor ? "Back to latest" : undefined}
@@ -441,7 +441,7 @@ export default async function Dashboard({ searchParams }: { readonly searchParam
               <input name="csrf" type="hidden" value={auth.csrfToken} />
               <div>
                 <label className="field-label" htmlFor="repositoryId">
-                  Confirmed repository
+                  Approved repository
                 </label>
                 <select
                   className="field-control"
@@ -451,7 +451,7 @@ export default async function Dashboard({ searchParams }: { readonly searchParam
                   required
                 >
                   {eligibleRepositories.length === 0 ? (
-                    <option value="">No confirmed recipe available</option>
+                    <option value="">No approved repository available</option>
                   ) : (
                     eligibleRepositories.map(({ repository }) => (
                       <option key={repository.id} value={repository.id}>
@@ -489,7 +489,7 @@ export default async function Dashboard({ searchParams }: { readonly searchParam
             {eligibleRepositories.length === 0 && repositoryRows.length > 0 ? (
               <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-signal-warning">
                 <Settings2 aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-                Open a repository, run analysis, and confirm its recipe first.
+                Open a repository, run the setup check, and approve the proposed setup first.
               </p>
             ) : null}
           </aside>

@@ -1,0 +1,24 @@
+zerops:
+  - setup: codexworkspace
+    build:
+      base: alpine/nodejs@24
+      buildCommands:
+        - npm install --prefix codex-cli-v147 --omit=dev --no-audit --no-fund @openai/codex@0.147.0
+      deployFiles:
+        - dist
+        - codex-cli-v147
+    deploy:
+      readinessCheck:
+        httpGet:
+          port: 8787
+          path: /health
+    run:
+      base: zcp@1
+      ports:
+        - port: 8787
+          httpSupport: true
+      envVariables:
+        CODEX_BINARY: /var/www/codex-cli-v147/node_modules/.bin/codex
+        CODEX_HOME: /home/zerops/.codex
+        PORT: "8787"
+      start: node ./dist/index.js

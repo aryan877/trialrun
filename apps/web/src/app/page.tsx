@@ -18,19 +18,19 @@ import { publicAuth } from "@/lib/auth";
 
 const processSteps = [
   {
-    icon: GitBranch,
-    title: "Build both commits",
-    copy: "TrialRun checks out the exact base and pull request SHAs, then boots each version with its own dependencies and data.",
+    icon: Code,
+    title: "Understand the change",
+    copy: "Codex reads the exact base and pull request source, the diff, and the repository's own instructions before it tests anything.",
   },
   {
-    icon: Browsers,
-    title: "Give Codex the wheel",
-    copy: "Codex explores the code and the live product together. It can inspect, click, type, compare, and change course as it learns.",
+    icon: GitBranch,
+    title: "Boot both commits",
+    copy: "Zerops runs the exact base and pull request privately, with separate dependencies and data for each side.",
   },
   {
     icon: Camera,
-    title: "Keep the receipts",
-    copy: "A deterministic verifier ties the verdict to assertions, screenshots, console events, logs, and exact code lines.",
+    title: "Prove live behavior",
+    copy: "Codex uses live Chrome against both apps while TrialRun records matched assertions, screenshots, video, logs, and code lines.",
   },
 ] as const;
 
@@ -38,12 +38,12 @@ const architectureSteps = [
   {
     icon: GithubLogo,
     title: "Repository",
-    copy: "Exact GitHub SHAs and a confirmed infrastructure recipe",
+    copy: "Exact GitHub SHAs and a setup approved by your team",
   },
   {
     icon: GitBranch,
     title: "Two app worlds",
-    copy: "Separate base and PR services, data, and dependencies",
+    copy: "Private base and PR deployments, each with its own data and dependencies",
   },
   {
     icon: Browsers,
@@ -69,17 +69,16 @@ export default async function Home() {
         <div className="mx-auto grid max-w-[1440px] lg:min-h-[720px] lg:grid-cols-[0.92fr_1.08fr]">
           <div className="flex items-center px-5 py-16 sm:px-8 sm:py-20 lg:px-12 lg:py-24 xl:px-16">
             <div className="max-w-[650px]">
-              <p className="mb-7 flex items-center gap-2 text-[15px] font-medium text-black/58">
-                <span className="inline-block size-2 rounded-full bg-[#ff3ca6]" />
-                AI pull request review, with receipts
+              <p className="mb-7 text-[15px] font-medium text-black/58">
+                Evidence-backed pull request review
               </p>
               <h1 className="text-[clamp(3.1rem,6.2vw,6rem)] leading-[0.94] font-semibold tracking-[-0.065em] text-balance">
                 Let Codex run the change before you merge it.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-7 text-black/62 sm:text-xl sm:leading-8">
-                TrialRun gives a live Codex agent two real versions of your app, a private browser,
-                and the code. It finds what changed, proves it, and leaves a review your team can
-                inspect.
+                Codex reads the change. Zerops privately boots the exact base and pull request.
+                Chrome tests both live. TrialRun posts the evidence to GitHub, then deletes the
+                exact temporary project.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link
@@ -98,8 +97,8 @@ export default async function Home() {
               </div>
               <p className="mt-5 flex max-w-lg items-start gap-2 text-sm leading-6 text-black/52">
                 <ShieldCheck aria-hidden="true" className="mt-0.5 size-[18px] shrink-0" weight="duotone" />
-                Your app runs in an isolated Zerops project. TrialRun records the deletion before a
-                review can close.
+                You approve the detected setup once. TrialRun generates the private review
+                environment without changing your repository configuration.
               </p>
             </div>
           </div>
@@ -113,20 +112,50 @@ export default async function Home() {
               sizes="(max-width: 1024px) 100vw, 55vw"
               src="/brand/trialrun-evidence-field-v1.jpg"
             />
-            <div className="absolute inset-x-5 bottom-5 rounded-xl border border-white/35 bg-white/92 p-4 shadow-[0_20px_60px_rgba(24,20,55,0.25)] backdrop-blur-md sm:inset-x-auto sm:right-7 sm:bottom-7 sm:w-[390px] sm:p-5">
+            <div className="absolute inset-x-5 bottom-5 rounded-xl border border-white/35 bg-white/94 p-4 shadow-[0_20px_60px_rgba(24,20,55,0.25)] backdrop-blur-md sm:inset-x-auto sm:right-7 sm:bottom-7 sm:w-[430px] sm:p-5">
               <div className="flex items-center justify-between gap-4">
-                <p className="text-sm font-semibold">One live review loop</p>
+                <p className="text-sm font-semibold">One review, end to end</p>
                 <span className="rounded-full bg-[#e9edff] px-2.5 py-1 text-xs font-medium text-[#264bd7]">
-                  Base ↔ PR
+                  Exact base ↔ PR
                 </span>
               </div>
-              <div className="mt-4 grid grid-cols-[24px_1fr] gap-x-3 gap-y-3 text-[13px] leading-5 text-black/65">
-                <MagnifyingGlass aria-hidden="true" className="mt-0.5 size-5 text-[#2357ff]" weight="duotone" />
-                <p>Observe the DOM, repository, console, network, and service logs.</p>
-                <Code aria-hidden="true" className="mt-0.5 size-5 text-[#d91383]" weight="duotone" />
-                <p>Investigate freely while every action and observation is recorded.</p>
-                <CheckCircle aria-hidden="true" className="mt-0.5 size-5 text-[#111111]" weight="duotone" />
-                <p>Let deterministic checks—not agent confidence—decide the result.</p>
+              <div className="mt-4 grid grid-cols-[24px_1fr] gap-x-3 gap-y-3.5 text-[13px] leading-5 text-black/65">
+                <MagnifyingGlass
+                  aria-hidden="true"
+                  className="mt-0.5 size-5 text-[#2357ff]"
+                  weight="duotone"
+                />
+                <p>
+                  <span className="font-semibold text-black">Codex understands the code.</span> It
+                  reads the exact source and change.
+                </p>
+                <GitBranch
+                  aria-hidden="true"
+                  className="mt-0.5 size-5 text-[#6347c7]"
+                  weight="duotone"
+                />
+                <p>
+                  <span className="font-semibold text-black">Zerops boots both commits.</span> Base
+                  and pull request stay private and isolated.
+                </p>
+                <Browsers
+                  aria-hidden="true"
+                  className="mt-0.5 size-5 text-[#d91383]"
+                  weight="duotone"
+                />
+                <p>
+                  <span className="font-semibold text-black">Live Chrome proves behavior.</span>{" "}
+                  Every action and observation is recorded.
+                </p>
+                <GithubLogo
+                  aria-hidden="true"
+                  className="mt-0.5 size-5 text-[#111111]"
+                  weight="duotone"
+                />
+                <p>
+                  <span className="font-semibold text-black">TrialRun delivers the proof.</span>{" "}
+                  GitHub gets the evidence, then the exact project is deleted.
+                </p>
               </div>
             </div>
           </div>
@@ -142,8 +171,8 @@ export default async function Home() {
                 A reviewer that can actually use your product.
               </h2>
               <p className="mt-5 max-w-md text-base leading-7 text-black/58">
-                This is not a generated checklist. The agent stays live while the app is running,
-                follows unexpected behavior, and connects runtime evidence back to the code.
+                The agent stays live while the app is running. It can follow unexpected behavior and
+                connect the runtime evidence back to the code that caused it.
               </p>
             </div>
             <div className="grid border-t border-black/12 md:grid-cols-3 md:border-l md:border-t-0">
@@ -190,36 +219,37 @@ export default async function Home() {
           <div className="border-t border-white/13 bg-[#18181a] p-5 sm:p-8 lg:border-t-0 lg:border-l lg:p-12">
             <div className="mx-auto max-w-xl overflow-hidden rounded-xl border border-white/14 bg-[#0c0c0d] shadow-2xl">
               <div className="flex h-12 items-center justify-between border-b border-white/10 px-4 text-xs text-white/60">
-                <span>Illustrative evidence trace</span>
-                <span>checkout.spec</span>
+                <span>Evidence path</span>
+                <span>One durable review record</span>
               </div>
               <div className="space-y-0 px-4 py-3 sm:px-6">
                 {[
-                  ["Observe", "Codex opened /checkout on both commits", "19:08:12"],
-                  ["Assert", "Base total matches the expected order", "19:08:24"],
-                  ["Compare", "PR total differs after delivery is applied", "19:08:39"],
-                  ["Inspect", "Finding linked to pricing.ts and browser proof", "19:09:03"],
-                ].map(([verb, copy, time], index) => (
+                  ["Understand", "Exact source, diff, and repository instructions"],
+                  ["Prove", "Matched base and pull request browser evidence"],
+                  ["Decide", "Independent assertions determine the verdict"],
+                  ["Deliver", "GitHub evidence plus exact-project teardown proof"],
+                ].map(([verb, copy], index) => (
                   <div
-                    className="grid grid-cols-[72px_1fr_auto] gap-3 border-b border-white/8 py-5 text-sm last:border-b-0"
+                    className="grid grid-cols-[80px_1fr] gap-3 border-b border-white/8 py-5 text-sm last:border-b-0"
                     key={verb}
                   >
-                    <span className={index === 2 ? "text-[#ff78c7]" : "text-[#7e9dff]"}>{verb}</span>
+                    <span className={index === 2 ? "text-[#ff78c7]" : "text-[#7e9dff]"}>
+                      {verb}
+                    </span>
                     <span className="text-white/78">{copy}</span>
-                    <span className="hidden font-mono text-[11px] text-white/60 sm:block">{time}</span>
                   </div>
                 ))}
               </div>
               <div className="grid border-t border-white/10 sm:grid-cols-2">
                 <div className="p-5 sm:border-r sm:border-white/10">
-                  <p className="text-xs text-white/60">Runtime verdict</p>
-                  <p className="mt-2 text-lg font-medium">Regression reproduced</p>
+                  <p className="text-xs text-white/60">GitHub output</p>
+                  <p className="mt-2 text-lg font-medium">Check and concise PR comment</p>
                 </div>
                 <div className="border-t border-white/10 p-5 sm:border-t-0">
                   <p className="text-xs text-white/60">Cleanup contract</p>
                   <p className="mt-2 flex items-center gap-2 text-lg font-medium">
                     <Trash aria-hidden="true" className="size-5 text-[#ff78c7]" weight="duotone" />
-                    Delete exact project
+                    Exact project deletion recorded
                   </p>
                 </div>
               </div>
@@ -234,8 +264,12 @@ export default async function Home() {
             <div>
               <p className="text-base font-medium text-[#6347c7]">Built around Zerops</p>
               <h2 className="mt-4 max-w-3xl text-4xl leading-[1.03] font-semibold tracking-[-0.05em] sm:text-5xl">
-                Each review gets the infrastructure its repository asks for—not a hardcoded demo.
+                TrialRun turns your existing app setup into two private deployments.
               </h2>
+              <p className="mt-5 max-w-2xl text-base leading-7 text-black/58">
+                Run a setup check, review the detected apps and commands, then approve them once.
+                TrialRun handles the Zerops configuration for every base and pull request run.
+              </p>
             </div>
             <a
               className="inline-flex h-11 items-center justify-center rounded-md border border-black/16 bg-white/70 px-4 text-sm font-semibold hover:bg-white"
@@ -262,8 +296,8 @@ export default async function Home() {
           Stop asking whether the PR works. Run it.
         </h2>
         <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-black/60">
-          Connect a repository, confirm the proposed stack once, and let every pull request earn its
-          evidence.
+          Connect a repository, run its setup check, approve how TrialRun will run it, and let every
+          pull request earn its evidence.
         </p>
         <Link
           className="mt-8 inline-flex h-13 items-center justify-center rounded-md bg-[#111111] px-6 text-[15px] font-semibold text-white hover:bg-black"
