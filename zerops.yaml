@@ -13,11 +13,6 @@ zerops:
         - cp -R apps/web/.next/static .deploy/web/apps/web/.next/static
         - cp -R apps/web/public .deploy/web/apps/web/public
       deployFiles: .deploy/web
-    deploy:
-      readinessCheck:
-        httpGet:
-          port: 3000
-          path: /api/health
     run:
       base: alpine/nodejs@24
       ports:
