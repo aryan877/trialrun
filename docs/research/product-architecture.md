@@ -71,6 +71,8 @@ The repository analyst may propose infrastructure but cannot provision it. A det
 - Local zCLI snapshot: `/Users/aryankumar/zerops-rank1-research/zcli`, commit `397a8ccbf0fe8e3c77b0a0ca4f1c43fc16f2d9f6`.
 - Local recipes snapshot: `/Users/aryankumar/zerops-rank1-research/zerops/recipes`.
 
+Live contract note, checked 8 August 2026: the documentation and JSON schema describe numeric `failureTimeout` and `retryPeriod` readiness values, but the live deployment validation path rejected those values while unmarshalling them as `time.Duration`. Both properties are optional, so TrialRun omits them and retains the required HTTP readiness probe instead of sending an undocumented representation.
+
 ## Codex connection model
 
 ### What the official interface supports

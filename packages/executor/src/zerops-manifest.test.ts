@@ -82,8 +82,6 @@ zerops:
       temporaryShutdown: true,
       readinessCheck: {
         httpGet: { port: 3_000, path: "/api/health" },
-        failureTimeout: 120,
-        retryPeriod: 5,
       },
     });
     expect(parsed.zerops[0]).toEqual({ setup: "worker", run: { start: "node worker.js" } });

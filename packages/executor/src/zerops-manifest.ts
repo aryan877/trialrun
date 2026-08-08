@@ -186,8 +186,6 @@ export async function prepareZeropsManifest(
   const deploy = mutableChild(setup, "deploy");
   deploy.readinessCheck = {
     httpGet: { port: deployment.port, path: deployment.healthPath },
-    failureTimeout: 120,
-    retryPeriod: 5,
   };
 
   const yaml = stringifyYaml(parsed, { lineWidth: 0 });
