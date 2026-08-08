@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1786187207217,
+      "tag": "20260808110647_awesome_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786187249156,
+      "tag": "20260808110729_elite_rhodey",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786188830728,
+      "tag": "20260808113350_real_doctor_strange",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786189843708,
+      "tag": "20260808115043_smooth_starbolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786190426405,
+      "tag": "20260808120026_lying_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786192127217,
+      "tag": "20260808122847_acoustic_ego",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786196518131,
+      "tag": "20260808134158_bumpy_sheva_callister",
+      "breakpoints": true
+    }
+  ]
+}

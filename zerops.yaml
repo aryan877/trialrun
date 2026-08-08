@@ -1,0 +1,116 @@
+zerops:
+  - setup: web
+    build:
+      base: alpine/nodejs@24
+      buildCommands:
+        - corepack enable
+        - corepack prepare pnpm@9.15.5 --activate
+        - pnpm install --frozen-lockfile
+        - pnpm --filter @trialrun/web build
+        - rm -rf .deploy/web
+        - mkdir -p .deploy/web/apps/web/.next
+        - cp -R apps/web/.next/standalone/. .deploy/web/
+        - cp -R apps/web/.next/static .deploy/web/apps/web/.next/static
+        - cp -R apps/web/public .deploy/web/apps/web/public
+      deployFiles: .deploy/web
+      cache:
+        - node_modules
+    deploy:
+      readinessCheck:
+        httpGet:
+          port: 3000
+          path: /api/health
+    run:
+      base: alpine/nodejs@24
+      ports:
+        - port: 3000
+          httpSupport: true
+      envVariables:
+        APP_URL: https://trialrun.aryankumar.dev
+        ARTIFACT_DRIVER: s3
+        GITHUB_APP_ID: "4526353"
+        GITHUB_CLIENT_ID: Iv23liwKU1sADhXQAAiw
+        HOSTNAME: 0.0.0.0
+        NODE_ENV: production
+        PORT: "3000"
+        S3_FORCE_PATH_STYLE: "true"
+        S3_REGION: us-east-1
+        VAULT_KEY_VERSION: "1"
+      start: node .deploy/web/apps/web/server.js
+
+  - setup: runner
+    build:
+      base: alpine/nodejs@24
+      buildCommands:
+        - corepack enable
+        - corepack prepare pnpm@9.15.5 --activate
+        - pnpm install --frozen-lockfile
+        - rm -rf .deploy/runner
+        - pnpm --filter @trialrun/runner deploy --prod .deploy/runner
+      deployFiles: .deploy/runner
+      cache:
+        - node_modules
+    run:
+      base: alpine/nodejs@24
+      prepareCommands:
+        - mkdir -p /home/zerops/.codex && chmod 700 /home/zerops/.codex
+      envVariables:
+        APP_URL: https://trialrun.aryankumar.dev
+        ARTIFACT_DRIVER: s3
+        CODEX_ANALYST_ENABLED: "true"
+        CODEX_BINARY: ./node_modules/@openai/codex-sdk/node_modules/.bin/codex
+        EXECUTION_PROVIDER: zerops
+        GITHUB_APP_ID: "4526353"
+        NODE_ENV: production
+        S3_FORCE_PATH_STYLE: "true"
+        S3_REGION: us-east-1
+        VAULT_KEY_VERSION: "1"
+        ZCLI_BINARY: ./node_modules/.bin/zcli
+        ZEROPS_API_URL: https://api.app-prg1.zerops.io/api/rest/public
+        ZEROPS_EXECUTOR_SOURCE_DIRECTORY: /var/www
+      start: >-
+        cd .deploy/runner &&
+        ./node_modules/.bin/tsx node_modules/@trialrun/db/src/migrate.ts &&
+        ./node_modules/.bin/tsx node_modules/@trialrun/db/src/seed.ts &&
+        ./node_modules/.bin/tsx src/index.ts
+
+  - setup: executor
+    build:
+      base: alpine/nodejs@24
+      buildCommands:
+        - corepack enable
+        - corepack prepare pnpm@9.15.5 --activate
+        - pnpm install --frozen-lockfile
+        - rm -rf .deploy/cloud-executor
+        - pnpm --filter @trialrun/cloud-executor deploy --prod .deploy/cloud-executor
+      deployFiles: .deploy/cloud-executor
+      cache:
+        - node_modules
+    deploy:
+      readinessCheck:
+        httpGet:
+          port: 3000
+          path: /health
+        failureTimeout: 120
+        retryPeriod: 5
+    run:
+      base: alpine/docker@26.1.5
+      prepareCommands:
+        - docker image pull mcr.microsoft.com/playwright:v1.62.1-noble
+      ports:
+        - port: 3000
+          httpSupport: true
+      start: >-
+        docker run --rm --init --network=host
+        --volume "$PWD/.deploy/cloud-executor:/workspace"
+        --workdir /workspace
+        --env PORT
+        --env TRIALRUN_EXECUTION_TOKEN
+        --env TRIALRUN_REVIEW_ID
+        --env TRIALRUN_BASE_URL
+        --env TRIALRUN_HEAD_URL
+        --env TRIALRUN_BASE_HEALTH_PATH
+        --env TRIALRUN_HEAD_HEALTH_PATH
+        --env TRIALRUN_TEST_SECRETS_BASE64
+        mcr.microsoft.com/playwright:v1.62.1-noble
+        ./node_modules/.bin/tsx src/index.ts

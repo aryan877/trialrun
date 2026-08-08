@@ -1,0 +1,2 @@
+ALTER TABLE "repository_recipes" DROP CONSTRAINT "repository_recipes_confirmation_complete";--> statement-breakpoint
+ALTER TABLE "repository_recipes" ADD CONSTRAINT "repository_recipes_confirmation_complete" CHECK (("repository_recipes"."status" <> 'confirmed') or ("repository_recipes"."approved_recipe" is not null and "repository_recipes"."fingerprint" is not null and "repository_recipes"."confirmed_at" is not null));

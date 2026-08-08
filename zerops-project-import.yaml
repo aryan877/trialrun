@@ -1,0 +1,67 @@
+project:
+  name: trialrun
+  description: Behavioral proof for every pull request, executed on disposable Zerops infrastructure.
+  corePackage: LIGHT
+  tags:
+    - hackathon
+    - trialrun
+
+services:
+  - hostname: db
+    type: postgresql:single@18
+    verticalAutoscaling:
+      cpuMode: SHARED
+      minCpu: 1
+      maxCpu: 2
+      minRam: 0.5
+      maxRam: 2
+      minDisk: 2
+      maxDisk: 10
+
+  - hostname: evidence
+    type: object-storage
+    objectStorageSize: 5
+    objectStoragePolicy: private
+
+  - hostname: web
+    type: alpine/nodejs@24
+    zeropsSetup: web
+    enableSubdomainAccess: true
+    envSecrets:
+      DATABASE_URL: ${db_connectionString}
+      S3_ENDPOINT: ${evidence_apiUrl}
+      S3_REGION: us-east-1
+      S3_BUCKET: ${evidence_bucketName}
+      S3_ACCESS_KEY_ID: ${evidence_accessKeyId}
+      S3_SECRET_ACCESS_KEY: ${evidence_secretAccessKey}
+      S3_FORCE_PATH_STYLE: "true"
+    verticalAutoscaling:
+      cpuMode: SHARED
+      minCpu: 1
+      maxCpu: 2
+      minRam: 0.5
+      maxRam: 2
+      minDisk: 1
+      maxDisk: 5
+
+  - hostname: runner
+    type: alpine/nodejs@24
+    zeropsSetup: runner
+    envSecrets:
+      DATABASE_URL: ${db_connectionString}
+      EXECUTION_PROVIDER: zerops
+      ARTIFACT_DRIVER: s3
+      S3_ENDPOINT: ${evidence_apiUrl}
+      S3_REGION: us-east-1
+      S3_BUCKET: ${evidence_bucketName}
+      S3_ACCESS_KEY_ID: ${evidence_accessKeyId}
+      S3_SECRET_ACCESS_KEY: ${evidence_secretAccessKey}
+      S3_FORCE_PATH_STYLE: "true"
+    verticalAutoscaling:
+      cpuMode: SHARED
+      minCpu: 1
+      maxCpu: 2
+      minRam: 1
+      maxRam: 4
+      minDisk: 2
+      maxDisk: 10
