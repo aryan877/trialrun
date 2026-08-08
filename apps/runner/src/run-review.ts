@@ -675,7 +675,11 @@ export async function runReview(
 
     await move("running", "Codex is inspecting the PR and controlling both live applications");
     signal?.throwIfAborted();
-    const rawAgentRun = await new CodexLiveAgent({ codexBinary: runnerConfig.CODEX_BINARY }).run({
+    const rawAgentRun = await new CodexLiveAgent({
+      codexBinary: runnerConfig.CODEX_BINARY,
+      model: runnerConfig.CODEX_MODEL,
+      reasoningEffort: runnerConfig.CODEX_REASONING_EFFORT,
+    }).run({
       mission,
       repositoryContext: {
         owner: source.repository.owner,

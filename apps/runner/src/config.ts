@@ -25,6 +25,8 @@ const configSchema = z
     RUNNER_JOB_TIMEOUT_SECONDS: z.coerce.number().int().min(30).max(3_600).default(900),
     CODEX_ANALYST_ENABLED: z.enum(["true", "false"]).default("true"),
     CODEX_BINARY: z.string().min(1).default("codex"),
+    CODEX_MODEL: z.string().min(1).default("gpt-5.6-sol"),
+    CODEX_REASONING_EFFORT: z.enum(["low", "medium"]).default("medium"),
     MANAGED_OPENAI_API_KEY: z.string().min(20).optional(),
     MANAGED_CODEX_HOME: z.string().min(1).optional(),
     APP_URL: z.string().url().default("http://localhost:3000"),

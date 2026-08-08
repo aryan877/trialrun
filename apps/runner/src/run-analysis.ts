@@ -35,6 +35,8 @@ export async function runRepositoryAnalysis(
     const evidence = await collectRepositoryEvidence(staged.workspace.directory);
     const proposal = await new CodexCliInfrastructureAnalyst({
       binary: runnerConfig.CODEX_BINARY,
+      model: runnerConfig.CODEX_MODEL,
+      reasoningEffort: runnerConfig.CODEX_REASONING_EFFORT,
       timeoutMs: runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS * 1_000,
       ...(runnerConfig.MANAGED_OPENAI_API_KEY
         ? { apiKey: runnerConfig.MANAGED_OPENAI_API_KEY }

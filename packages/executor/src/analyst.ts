@@ -26,6 +26,8 @@ export interface CodexInfrastructureAnalystOptions {
   readonly timeoutMs?: number;
   readonly apiKey?: string;
   readonly codexHome?: string;
+  readonly model?: string;
+  readonly reasoningEffort?: "low" | "medium";
 }
 
 const disabledAnalystFeatures = [
@@ -114,12 +116,16 @@ export class CodexCliInfrastructureAnalyst implements InfrastructureAnalyst {
   readonly #apiKey: string | undefined;
   readonly #binary: string;
   readonly #codexHome: string | undefined;
+  readonly #model: string;
+  readonly #reasoningEffort: "low" | "medium";
   readonly #timeoutMs: number;
 
   constructor(options: CodexInfrastructureAnalystOptions = {}) {
     this.#apiKey = options.apiKey;
     this.#binary = options.binary ?? "codex";
     this.#codexHome = options.codexHome;
+    this.#model = options.model ?? "gpt-5.6-sol";
+    this.#reasoningEffort = options.reasoningEffort ?? "medium";
     this.#timeoutMs = options.timeoutMs ?? 180_000;
   }
 
@@ -165,6 +171,10 @@ export class CodexCliInfrastructureAnalyst implements InfrastructureAnalyst {
             "--ephemeral",
             "--ignore-user-config",
             "--ignore-rules",
+            "--model",
+            this.#model,
+            "--config",
+            `model_reasoning_effort=${JSON.stringify(this.#reasoningEffort)}`,
             ...analystSafetyArguments(),
             "--sandbox",
             "read-only",

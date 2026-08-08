@@ -99,7 +99,7 @@ export interface LiveAgentRunResult {
 export interface CodexLiveAgentOptions {
   readonly codexBinary?: string;
   readonly model?: string;
-  readonly reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  readonly reasoningEffort?: "low" | "medium";
 }
 
 function safeCodexEnvironment(input: {
@@ -344,7 +344,7 @@ export class CodexLiveAgent {
       const thread = codex.startThread({
         ...(this.#options.model ? { model: this.#options.model } : {}),
         approvalPolicy: "never",
-        modelReasoningEffort: this.#options.reasoningEffort ?? "high",
+        modelReasoningEffort: this.#options.reasoningEffort ?? "medium",
         networkAccessEnabled: false,
         sandboxMode: "read-only",
         skipGitRepoCheck: true,

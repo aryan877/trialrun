@@ -13,8 +13,6 @@ zerops:
         - cp -R apps/web/.next/static .deploy/web/apps/web/.next/static
         - cp -R apps/web/public .deploy/web/apps/web/public
       deployFiles: .deploy/web
-      cache:
-        - node_modules
     deploy:
       readinessCheck:
         httpGet:
@@ -59,6 +57,8 @@ zerops:
         ARTIFACT_DRIVER: s3
         CODEX_ANALYST_ENABLED: "true"
         CODEX_BINARY: /var/www/.deploy/runner/node_modules/.pnpm/node_modules/@openai/codex/bin/codex.js
+        CODEX_MODEL: gpt-5.6-sol
+        CODEX_REASONING_EFFORT: medium
         EXECUTION_PROVIDER: zerops
         GITHUB_APP_ID: "4526353"
         NODE_ENV: production
