@@ -58,7 +58,7 @@ zerops:
         APP_URL: https://trialrun.aryankumar.dev
         ARTIFACT_DRIVER: s3
         CODEX_ANALYST_ENABLED: "true"
-        CODEX_BINARY: ./node_modules/@openai/codex-sdk/node_modules/.bin/codex
+        CODEX_BINARY: /var/www/.deploy/runner/node_modules/.pnpm/node_modules/@openai/codex/bin/codex.js
         EXECUTION_PROVIDER: zerops
         GITHUB_APP_ID: "4526353"
         NODE_ENV: production
