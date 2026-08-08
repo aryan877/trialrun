@@ -25,7 +25,6 @@ services:
 
   - hostname: web
     type: alpine/nodejs@24
-    zeropsSetup: web
     enableSubdomainAccess: true
     envSecrets:
       DATABASE_URL: ${db_connectionString}
@@ -46,7 +45,6 @@ services:
 
   - hostname: runner
     type: alpine/nodejs@24
-    zeropsSetup: runner
     envSecrets:
       DATABASE_URL: ${db_connectionString}
       EXECUTION_PROVIDER: zerops
