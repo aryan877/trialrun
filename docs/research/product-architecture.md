@@ -73,6 +73,8 @@ The repository analyst may propose infrastructure but cannot provision it. A det
 
 Live contract note, checked 8 August 2026: the documentation and JSON schema describe numeric `failureTimeout` and `retryPeriod` readiness values, but the live deployment validation path rejected those values while unmarshalling them as `time.Duration`. Both properties are optional, so TrialRun omits them and retains the required HTTP readiness probe instead of sending an undocumented representation.
 
+Live runtime note, checked 8 August 2026: Zerops directly executes the first token in `run.start`; it does not implicitly wrap compound shell syntax. TrialRun uses an explicit `sh -lc` only for the runner's ordered migration, seed, and process startup chain, with an absolute deployment directory and `exec` for correct signal delivery.
+
 ## Codex connection model
 
 ### What the official interface supports
