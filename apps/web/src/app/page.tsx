@@ -1,8 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, CheckCircle, GithubLogo, ShieldCheck, Trash } from "@phosphor-icons/react/ssr";
+import { ArrowRight, GithubLogo, ShieldCheck, Trash } from "@phosphor-icons/react/ssr";
 
 import { LandingProof } from "@/components/landing-proof";
+import {
+  EvidenceDeliveryStory,
+  LiveInvestigationStory,
+  RepositoryToLabStory,
+} from "@/components/landing-review-story";
 import { publicRuntimeContent } from "@/components/public-runtime";
 import { PublicFooter, PublicHeader } from "@/components/public-site";
 import { publicAuth } from "@/lib/auth";
@@ -23,33 +28,6 @@ const reviewRoles = [
     name: "Codex tests both systems live",
     copy: "It drives real Chrome, calls app APIs, reads logs, and changes course as it learns.",
   },
-] as const;
-
-const setupSteps = [
-  {
-    number: "01",
-    title: "Connect a repository",
-    copy: "Install the GitHub App on only the repositories TrialRun should review.",
-  },
-  {
-    number: "02",
-    title: "Approve how it runs",
-    copy: "Codex finds the real build, app, database, port, and health rules. You check one plain summary.",
-  },
-  {
-    number: "03",
-    title: "Open a pull request",
-    copy: "TrialRun runs the base and change, posts its proof, and removes the review project.",
-  },
-] as const;
-
-const evidenceItems = [
-  "Matched base and PR WebMs",
-  "Exact immutable commit SHAs",
-  "Browser, network, and app logs",
-  "Exact code citations",
-  "Codex-chosen UI and API checks",
-  "Exact-project deletion proof",
 ] as const;
 
 export default async function Home() {
@@ -170,35 +148,11 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="relative border-b border-black/10 bg-white" id="how-it-works">
-        <span className="absolute top-0" id="zerops" />
-        <div className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-12 lg:py-24">
-          <div className="grid gap-10 lg:grid-cols-[0.72fr_1.28fr] lg:gap-16">
-            <div>
-              <p className="text-base font-medium text-[#2357ff]">Set it up once</p>
-              <h2 className="mt-4 max-w-md text-4xl leading-[1.03] font-semibold tracking-[-0.05em] sm:text-5xl">
-                Your team never writes Zerops config.
-              </h2>
-              <p className="mt-5 max-w-md text-base leading-7 text-black/58">
-                TrialRun studies the repository and shows the maintainer a short run summary. The
-                approved setup becomes the safe template for later pull requests.
-              </p>
-            </div>
-            <div className="grid border-t border-black/12 md:grid-cols-3 md:border-l md:border-t-0">
-              {setupSteps.map((step) => (
-                <article
-                  className="border-b border-black/12 py-8 md:border-r md:border-b-0 md:px-7 md:last:border-r-0"
-                  key={step.number}
-                >
-                  <span className="text-sm tabular-nums text-black/45">{step.number}</span>
-                  <h3 className="mt-12 text-xl font-semibold tracking-[-0.025em]">{step.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-black/58">{step.copy}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
+      <RepositoryToLabStory />
+
+      <LiveInvestigationStory />
+
+      <EvidenceDeliveryStory />
 
       <section className="border-b border-black/10 bg-[#ffd8ee]">
         <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[0.8fr_1.2fr] lg:px-12 lg:py-24">
@@ -228,37 +182,6 @@ export default async function Home() {
                 workspace tied to your account, and its login never enters the app being tested.
               </p>
             </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-b border-black/10 bg-[#eef1ff]" id="evidence">
-        <div className="mx-auto grid max-w-[1440px] gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-12 lg:py-24">
-          <div>
-            <p className="text-base font-medium text-[#2357ff]">What the review keeps</p>
-            <h2 className="mt-4 max-w-xl text-4xl leading-[1.03] font-semibold tracking-[-0.05em] sm:text-5xl">
-              A verdict you can open, replay, and challenge.
-            </h2>
-            <p className="mt-5 max-w-xl text-base leading-7 text-black/58">
-              Codex chooses what to investigate and writes the pass, fail, or inconclusive review.
-              TrialRun checks that every cited file, screenshot, recording, API response, and log
-              came from this exact run before publishing it.
-            </p>
-          </div>
-          <div className="grid overflow-hidden rounded-xl border border-black/12 bg-white sm:grid-cols-2">
-            {evidenceItems.map((item) => (
-              <div
-                className="flex min-h-20 items-center gap-3 border-b border-black/10 px-5 last:border-b-0 sm:border-r sm:nth-[5]:border-b-0 sm:nth-[6]:border-b-0 sm:nth-[2n]:border-r-0"
-                key={item}
-              >
-                <CheckCircle
-                  aria-hidden="true"
-                  className="size-5 shrink-0 text-[#2357ff]"
-                  weight="fill"
-                />
-                <span className="text-sm font-medium">{item}</span>
-              </div>
-            ))}
           </div>
         </div>
       </section>

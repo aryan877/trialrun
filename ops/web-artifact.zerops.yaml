@@ -20,5 +20,13 @@ zerops:
         RUNNER_REPOSITORY_MCP_URL: http://runner:3001/mcp
         S3_FORCE_PATH_STYLE: "true"
         S3_REGION: us-east-1
+        TRIALRUN_PROOF_BASE_SHA: 95dfb930246773d15e431b8359cce9e666dab01f
+        TRIALRUN_PROOF_BASE_WEBM_URL: https://trialrun.aryankumar.dev/proof/reviews/7602b1b9-f40b-4940-b799-17e760c21f3a/p1_CE3dNB4kOLUCW7dGQtANWDuifkT-cV1J-MKhsI_WcAY/artifacts/e745c538-b2c4-4dcc-bd30-b538b4784c63
+        TRIALRUN_PROOF_GITHUB_CHECK_URL: https://github.com/aryan877/trialrun-proof/runs/93253764185
+        TRIALRUN_PROOF_HEAD_SHA: fb978355bcb8037b8c16549be3ebcad7ed7d57f2
+        TRIALRUN_PROOF_HEAD_WEBM_URL: https://trialrun.aryankumar.dev/proof/reviews/7602b1b9-f40b-4940-b799-17e760c21f3a/p1_CE3dNB4kOLUCW7dGQtANWDuifkT-cV1J-MKhsI_WcAY/artifacts/bad9b920-f222-40f0-a88b-c7250d75fc57
+        TRIALRUN_PROOF_REVIEW_URL: https://trialrun.aryankumar.dev/proof/reviews/7602b1b9-f40b-4940-b799-17e760c21f3a/p1_CE3dNB4kOLUCW7dGQtANWDuifkT-cV1J-MKhsI_WcAY
+        TRIALRUN_PROOF_SUMMARY: "Codex reproduced the cart regression: the pull request changed the wrong product while the base changed the selected item."
+        TRIALRUN_PROOF_TEARDOWN_SUMMARY: "Zerops deleted project bTokQ0eFRjyMmFDZcO5XUw, then the exact project lookup returned projectNotFound."
         VAULT_KEY_VERSION: "1"
       start: node apps/web/server.js
