@@ -25,7 +25,10 @@ export async function GET(
 ): Promise<Response> {
   try {
     const params = await context.params;
-    const review = await loadPublicProofReview(params);
+    const review = await loadPublicProofReview({
+      reviewId: params.reviewId,
+      token: params.token,
+    });
     const artifactId = artifactIdSchema.safeParse(params.artifactId);
     if (!review || !artifactId.success) return emptyArtifactResponse(404);
 

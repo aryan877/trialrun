@@ -50,17 +50,19 @@ This is the execution ledger. A checked box means code and its stated verificati
 
 - [x] Replace fixture-bound local provider with a recipe-driven local container lifecycle for the bounded local topology.
 - [x] Stage exact base/head Git SHAs into separate workspaces.
-- [x] Build a foundational paired semantic Chromium executor against both sides.
-- [x] Capture matched screenshots, assertions, console, failed requests, logs, hashes, and first divergence, plus secret-safe base/PR WebM recordings with paired finding UI. Real live-review evidence remains a separate gate.
+- [x] Build a stateful Chromium executor that exposes both running applications to one live Codex review.
+- [x] Capture Codex-chosen screenshots, assertions, console, failed requests, logs, hashes, API responses, and secret-safe base/PR WebM recordings. Real release evidence remains a separate gate.
 - [x] Replace fixed-plan replay in the product path with a stateful live Codex observe/act/observe tool session; keep the typed object only as mission, capability, secret-name, and budget policy.
-- [x] Persist every live tool observation/action/result and support side switch, deterministic reset, and matched checkpoints. A visual-model fallback is intentionally deferred.
+- [x] Persist every live tool observation/action/result and support side switching, deterministic reset, and Codex-chosen checkpoints. A visual-model fallback is intentionally deferred.
+- [x] Add direct authenticated API tools inside the disposable executor: fixed base/head origins, relative paths only, browser-session cookies or named secrets, bounded/redacted responses, optional paired requests, fact assertions, and persisted request evidence. The pure contract, real Chromium cookie reuse, authenticated MCP surface, redaction, and evidence protocol are locally verified; production proof remains the next gate.
+- [ ] Live-prove one review where Codex combines repository inspection, adaptive Chrome control, and live API requests, returns the verdict itself, and cites only evidence recorded by that run.
 - [ ] Test cancellation, timeout, process crash, redaction, and cleanup.
 
 ## 6. Zerops provider
 
 - [x] Validate generated import YAML against the pinned current Zerops schema; live schema acceptance remains a separate gate.
 - [x] Implement creation of a disposable project with duplicated base/head dependency graphs and fixed executor; live proof remains open.
-- [x] Implement private base/head source upload with explicit-ID `zcli service push`; live proof remains open.
+- [x] Implement private base/head source upload with explicit-ID `zcli push`; live proof remains open.
 - [x] Implement build/process/readiness waits and build/application log collection; live proof remains open.
 - [x] Implement a token-protected, one-review stateful browser-tool bridge with no reusable credentials or arbitrary automation surface.
 - [ ] Copy sanitized artifacts to persistent Zerops object storage.
@@ -88,7 +90,7 @@ This is the execution ledger. A checked box means code and its stated verificati
 - [x] Bounded DeepSeek/OpenCode architecture, security, code-quality, and UI audits run; identified P0/P1 findings are still being remediated and re-verified.
 - [x] Render a secret-safe ignored persistent Zerops import from Keychain and generated deployment state; validate both the import and deployment manifest against the current live Zerops schemas.
 - [x] Production-standalone local smoke test proves database-backed readiness, owned public assets, real seeded judge authentication, and the authenticated dashboard.
-- [ ] Publish the judge-facing README with verified TrialRun UI/evidence screenshots, an overlap-checked SVG architecture diagram, locally stored official technology marks with source/attribution, threat model, setup guide, judge credentials, and 90-second demo path. The draft, verified diagram, marks, and attribution exist; real PR/Check/WebM/teardown links intentionally remain release blockers.
+- [ ] Publish the judge-facing README with verified TrialRun UI/evidence screenshots, a small overlap-checked SVG architecture diagram, locally stored official technology marks with source/attribution, threat model, setup guide, and 90-second demo path. Never publish operator credentials. The draft, verified diagram, marks, and attribution exist; real PR/Check/WebM/teardown links intentionally remain release blockers.
 - [ ] Live GitHub PR receives a Check backed by a live Zerops run and teardown proof.
 - [x] Persistent live Zerops project exposes the working product and contains separate web, runner, PostgreSQL, and object-storage services.
 - [ ] Judges can read the submitted repository and open the exact repository URL in the form.

@@ -796,6 +796,11 @@ export async function runReview(
           { providerProjectId },
         );
       },
+      onServiceProgress: async (progress) => {
+        await safeEvent("environment.service", `${progress.hostname} is ${progress.state}`, {
+          ...progress,
+        });
+      },
     });
     signal?.throwIfAborted();
     await db

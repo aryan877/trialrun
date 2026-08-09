@@ -20,8 +20,8 @@ const reviewRoles = [
   },
   {
     image: "/brand/chrome.svg",
-    name: "Real Chrome tests both live",
-    copy: "Codex observes, acts, and changes course while every step is recorded.",
+    name: "Codex tests both systems live",
+    copy: "It drives real Chrome, calls app APIs, reads logs, and changes course as it learns.",
   },
 ] as const;
 
@@ -121,13 +121,21 @@ export default async function Home() {
                 <div className="w-full overflow-hidden rounded-xl border border-white/45 bg-white/94 shadow-[0_28px_90px_rgba(32,24,82,0.28)] backdrop-blur-md">
                   <div className="flex min-h-14 items-center justify-between gap-4 border-b border-black/10 px-5">
                     <p className="text-sm font-semibold">How one real review runs</p>
-                    <span className="text-xs font-medium text-black/48">Waiting for live proof</span>
+                    <span className="text-xs font-medium text-black/48">
+                      Waiting for live proof
+                    </span>
                   </div>
                   <div className="divide-y divide-black/10">
                     {reviewRoles.map((role) => (
                       <div className="grid grid-cols-[42px_1fr] gap-4 px-5 py-4" key={role.name}>
                         <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border border-black/10 bg-white p-2">
-                          <Image alt="" aria-hidden="true" height={28} src={role.image} width={28} />
+                          <Image
+                            alt=""
+                            aria-hidden="true"
+                            height={28}
+                            src={role.image}
+                            width={28}
+                          />
                         </div>
                         <div>
                           <p className="text-sm font-semibold">{role.name}</p>
@@ -148,7 +156,10 @@ export default async function Home() {
                       </div>
                     </div>
                   </div>
-                  <div className="border-t border-black/10 bg-[#fff0f8] px-5 py-3 text-xs leading-5 text-[#8c155a]" role="status">
+                  <div
+                    className="border-t border-black/10 bg-[#fff0f8] px-5 py-3 text-xs leading-5 text-[#8c155a]"
+                    role="status"
+                  >
                     This space stays empty until one live review publishes both recordings, its
                     GitHub Check, and exact-project deletion proof.
                   </div>
@@ -198,8 +209,8 @@ export default async function Home() {
               Use ours. Or bring yours.
             </h2>
             <p className="mt-5 max-w-lg text-base leading-7 text-black/60">
-              Each review uses one Codex connection from code reading through live browser proof.
-              You choose which connection TrialRun uses.
+              Each review uses one Codex connection from code reading through live UI, API, and log
+              investigation. You choose which connection TrialRun uses.
             </p>
           </div>
           <div className="border-t border-black/16">
@@ -207,7 +218,7 @@ export default async function Home() {
               <h3 className="text-xl font-semibold tracking-[-0.025em]">TrialRun-managed Codex</h3>
               <p className="text-sm leading-6 text-black/62">
                 Choose it and run. There is nothing else to authorize, and the same review limits
-                apply from repository analysis through Chrome testing.
+                apply from repository analysis through live UI, API, and log testing.
               </p>
             </article>
             <article className="grid gap-4 border-b border-black/16 py-7 sm:grid-cols-[0.4fr_0.6fr] sm:gap-8">

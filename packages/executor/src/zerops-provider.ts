@@ -36,7 +36,15 @@ import { isZeropsProjectAbsentResponse } from "./zerops-api-response";
 const processSchema = z
   .object({
     id: z.string().min(1),
-    status: z.enum(["PENDING", "RUNNING", "ROLLBACKING", "CANCELING", "FINISHED", "FAILED", "CANCELED"]),
+    status: z.enum([
+      "PENDING",
+      "RUNNING",
+      "ROLLBACKING",
+      "CANCELING",
+      "FINISHED",
+      "FAILED",
+      "CANCELED",
+    ]),
     actionName: z.string().optional(),
   })
   .passthrough();
@@ -51,7 +59,7 @@ const importResponseSchema = z.object({
       processes: z.array(processSchema),
     }),
   ),
-  });
+});
 
 const applicationLogCollectionTimeoutMs = 30_000;
 
@@ -318,7 +326,10 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
     const response = await fetch(
       `${this.#options.apiUrl.replace(/\/$/, "")}/project/${encodeURIComponent(projectId)}`,
       {
-        headers: { Accept: "application/json", Authorization: `Bearer ${this.#options.accessToken}` },
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${this.#options.accessToken}`,
+        },
         signal: AbortSignal.timeout(30_000),
       },
     );
@@ -336,7 +347,8 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
       }
     }
     if (isZeropsProjectAbsentResponse(response.status, body)) return true;
-    if (!response.ok) throw new Error(`Zerops project absence check returned HTTP ${response.status}.`);
+    if (!response.ok)
+      throw new Error(`Zerops project absence check returned HTTP ${response.status}.`);
     return false;
   }
 
@@ -386,7 +398,9 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
       }
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
     }
-    throw new Error(`Timed out waiting for the public TrialRun executor health gate: ${lastStatus}.`);
+    throw new Error(
+      `Timed out waiting for the public TrialRun executor health gate: ${lastStatus}.`,
+    );
   }
 
   async #enablePublicService(
@@ -463,7 +477,9 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
           if (code === 0) resolveOutput(output);
           else {
             rejectOutput(
-              new Error(`zCLI ${args[0] ?? "command"} exited with ${code ?? exitSignal}: ${output}`),
+              new Error(
+                `zCLI ${args[0] ?? "command"} exited with ${code ?? exitSignal}: ${output}`,
+              ),
             );
           }
         });
@@ -557,9 +573,11 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
     });
     const executorToken = randomToken();
     const primaryDeployment = topology.deployments.find(
-      (deployment) => deployment.side === "base" && deployment.logicalService === input.recipe.primaryService,
+      (deployment) =>
+        deployment.side === "base" && deployment.logicalService === input.recipe.primaryService,
     );
-    if (!primaryDeployment) throw new Error("Compiled topology is missing its primary application deployment.");
+    if (!primaryDeployment)
+      throw new Error("Compiled topology is missing its primary application deployment.");
     const baseUrl = `http://base${input.recipe.primaryService}:${primaryDeployment.port}`;
     const headUrl = `http://head${input.recipe.primaryService}:${primaryDeployment.port}`;
     const services = topology.services.map((service) => {
@@ -605,26 +623,70 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
         preparedDeployments.push(await this.#prepareDeployment(deployment, input));
       }
       const imported = importResponseSchema.parse(
-        await this.#request(`/client/${encodeURIComponent(this.#options.clientId)}/project/import`, {
-          method: "POST",
-          body: JSON.stringify({ yaml }),
-          ...(input.signal ? { signal: input.signal } : {}),
-        }),
+        await this.#request(
+          `/client/${encodeURIComponent(this.#options.clientId)}/project/import`,
+          {
+            method: "POST",
+            body: JSON.stringify({ yaml }),
+            ...(input.signal ? { signal: input.signal } : {}),
+          },
+        ),
       );
       const serviceByHostname = (hostname: string) => {
         const service = imported.serviceStacks.find((candidate) => candidate.name === hostname);
         if (!service) throw new Error(`Zerops import did not return service ${hostname}.`);
         return service;
       };
+      const reportService = async (
+        hostname: string,
+        state: "created" | "deploying" | "ready",
+      ): Promise<void> => {
+        if (!input.onServiceProgress) return;
+        const importedService = serviceByHostname(hostname);
+        const topologyService = topology.services.find((service) => service.hostname === hostname);
+        if (!topologyService) throw new Error(`Compiled topology is missing service ${hostname}.`);
+        const deployment = topology.deployments.find(
+          (candidate) => candidate.hostname === hostname,
+        );
+        await input.onServiceProgress({
+          hostname,
+          serviceId: importedService.id,
+          zeropsType: topologyService.type,
+          side:
+            deployment?.side === "base" || deployment?.side === "head"
+              ? deployment.side
+              : deployment?.side === "executor"
+                ? "executor"
+                : hostname.startsWith("base")
+                  ? "base"
+                  : "head",
+          kind:
+            deployment?.side === "executor"
+              ? "executor"
+              : deployment
+                ? "application"
+                : "dependency",
+          state,
+        });
+      };
 
       try {
         await input.onProjectCreated?.(imported.projectId);
+        for (const service of imported.serviceStacks) {
+          await reportService(service.name, "created");
+        }
         await Promise.all(
           imported.serviceStacks.flatMap((service) =>
             service.processes.map((process) => this.#waitForProcess(process.id, input.signal)),
           ),
         );
+        for (const service of imported.serviceStacks) {
+          if (!topology.deployments.some((deployment) => deployment.hostname === service.name)) {
+            await reportService(service.name, "ready");
+          }
+        }
         for (const prepared of preparedDeployments) {
+          await reportService(prepared.deployment.hostname, "deploying");
           await this.#pushDeployment(
             imported.projectId,
             serviceByHostname(prepared.deployment.hostname).id,
@@ -632,6 +694,9 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
             input,
             executorToken,
           );
+          if (prepared.deployment.side !== "executor") {
+            await reportService(prepared.deployment.hostname, "ready");
+          }
         }
         const executorServiceId = serviceByHostname("executor").id;
         const executorUrl = await this.#enablePublicService(
@@ -653,11 +718,15 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
         const executorDeployment = preparedDeployments.find(
           ({ deployment }) => deployment.side === "executor",
         )?.deployment;
-        if (!executorDeployment) throw new Error("Compiled topology is missing the executor deployment.");
+        if (!executorDeployment)
+          throw new Error("Compiled topology is missing the executor deployment.");
         if (executorDeployment.hostname !== "executor" || executorDeployment.port !== 3_000) {
-          throw new Error("Compiled executor deployment does not match the public access contract.");
+          throw new Error(
+            "Compiled executor deployment does not match the public access contract.",
+          );
         }
         await this.#waitForPublicExecutor(executorUrl, input.signal);
+        await reportService("executor", "ready");
         const executorRequest = async (path: string, init: RequestInit = {}): Promise<Response> => {
           const response = await fetch(new URL(path, executorUrl), {
             ...init,
@@ -683,105 +752,107 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
         const primary = input.recipe.primaryService;
         let deletionProcessId: string | null = null;
         return {
-        provider: "zerops",
-        providerProjectId: imported.projectId,
-        baseUrl,
-        headUrl,
-        liveReview: {
-          mcpUrl: new URL("/mcp", executorUrl).href,
-          bearerToken: executorToken,
-        },
-        readLiveEvidence,
-        readLiveArtifact: async (artifactId: string) => {
-          const validatedArtifactId = liveArtifactIdSchema.parse(artifactId);
-          const evidence = await readLiveEvidence();
-          const artifact = findCapturedLiveArtifact(evidence, validatedArtifactId);
-          const response = await executorRequest(
-            `/artifacts/${encodeURIComponent(validatedArtifactId)}`,
-          );
-          const declaredLength = Number(response.headers.get("content-length"));
-          if (declaredLength !== artifact.byteSize) {
-            throw new Error("Live artifact response length does not match its evidence manifest.");
-          }
-          if (response.headers.get("content-type") !== artifact.mediaType) {
-            throw new Error("Live artifact response type does not match its evidence manifest.");
-          }
-          const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes.byteLength !== artifact.byteSize) {
-            throw new Error("Live artifact byte length does not match its evidence manifest.");
-          }
-          const digest = createHash("sha256").update(bytes).digest("hex");
-          if (digest !== artifact.digest) {
-            throw new Error("Live artifact digest does not match its evidence manifest.");
-          }
-          return bytes;
-        },
-        cancelLiveReview: async () => {
-          const payload = await readExecutorJson(
-            await executorRequest("/cancel", { method: "POST" }),
-          );
-          return liveBrowserEvidenceEnvelopeSchema.parse(payload).evidence;
-        },
-        sealLiveReview: async () => {
-          const payload = await readExecutorJson(
-            await executorRequest("/finish", { method: "POST" }),
-          );
-          return liveBrowserEvidenceEnvelopeSchema.parse(payload).evidence;
-        },
-        readLogs: async (side: ReviewSide) =>
-          this.#runZcli(
-            [
-              "service",
-              "log",
-              "--project-id",
-              imported.projectId,
-              "--service-id",
-              serviceByHostname(`${side}${primary}`).id,
-              "--format",
-              "JSONSTREAM",
-              "--limit",
-              "500",
-            ],
-            Object.values(input.secrets),
-            independentApplicationLogSignal(),
-          ),
-        destroy: async (): Promise<TeardownProof> => {
-          const startedAt = new Date().toISOString();
-          if (await this.#projectIsAbsent(imported.projectId)) {
+          provider: "zerops",
+          providerProjectId: imported.projectId,
+          baseUrl,
+          headUrl,
+          liveReview: {
+            mcpUrl: new URL("/mcp", executorUrl).href,
+            bearerToken: executorToken,
+          },
+          readLiveEvidence,
+          readLiveArtifact: async (artifactId: string) => {
+            const validatedArtifactId = liveArtifactIdSchema.parse(artifactId);
+            const evidence = await readLiveEvidence();
+            const artifact = findCapturedLiveArtifact(evidence, validatedArtifactId);
+            const response = await executorRequest(
+              `/artifacts/${encodeURIComponent(validatedArtifactId)}`,
+            );
+            const declaredLength = Number(response.headers.get("content-length"));
+            if (declaredLength !== artifact.byteSize) {
+              throw new Error(
+                "Live artifact response length does not match its evidence manifest.",
+              );
+            }
+            if (response.headers.get("content-type") !== artifact.mediaType) {
+              throw new Error("Live artifact response type does not match its evidence manifest.");
+            }
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            if (bytes.byteLength !== artifact.byteSize) {
+              throw new Error("Live artifact byte length does not match its evidence manifest.");
+            }
+            const digest = createHash("sha256").update(bytes).digest("hex");
+            if (digest !== artifact.digest) {
+              throw new Error("Live artifact digest does not match its evidence manifest.");
+            }
+            return bytes;
+          },
+          cancelLiveReview: async () => {
+            const payload = await readExecutorJson(
+              await executorRequest("/cancel", { method: "POST" }),
+            );
+            return liveBrowserEvidenceEnvelopeSchema.parse(payload).evidence;
+          },
+          sealLiveReview: async () => {
+            const payload = await readExecutorJson(
+              await executorRequest("/finish", { method: "POST" }),
+            );
+            return liveBrowserEvidenceEnvelopeSchema.parse(payload).evidence;
+          },
+          readLogs: async (side: ReviewSide) =>
+            this.#runZcli(
+              [
+                "service",
+                "log",
+                "--project-id",
+                imported.projectId,
+                "--service-id",
+                serviceByHostname(`${side}${primary}`).id,
+                "--format",
+                "JSONSTREAM",
+                "--limit",
+                "500",
+              ],
+              Object.values(input.secrets),
+              independentApplicationLogSignal(),
+            ),
+          destroy: async (): Promise<TeardownProof> => {
+            const startedAt = new Date().toISOString();
+            if (await this.#projectIsAbsent(imported.projectId)) {
+              return {
+                startedAt,
+                completedAt: new Date().toISOString(),
+                providerProjectId: imported.projectId,
+                deleted: true,
+                message: "The exact Zerops project is absent.",
+              };
+            }
+            if (!deletionProcessId) {
+              const project = projectSchema.parse(
+                await this.#request(`/project/${encodeURIComponent(imported.projectId)}`),
+              );
+              assertOwnedReviewProject(project, {
+                projectId: imported.projectId,
+                clientId: this.#options.clientId,
+                description: ownershipDescription,
+              });
+              const process = deleteResponseSchema.parse(
+                await this.#request(`/project/${encodeURIComponent(imported.projectId)}`, {
+                  method: "DELETE",
+                }),
+              );
+              deletionProcessId = process.id;
+            }
+            await this.#waitForProcess(deletionProcessId);
+            await this.#waitForProjectAbsence(imported.projectId);
             return {
               startedAt,
               completedAt: new Date().toISOString(),
               providerProjectId: imported.projectId,
               deleted: true,
-              message: "The exact Zerops project is absent.",
+              message: `Zerops deletion process ${deletionProcessId} finished and the exact project endpoint returned projectNotFound.`,
             };
-          }
-          if (!deletionProcessId) {
-            const project = projectSchema.parse(
-              await this.#request(`/project/${encodeURIComponent(imported.projectId)}`),
-            );
-            assertOwnedReviewProject(project, {
-              projectId: imported.projectId,
-              clientId: this.#options.clientId,
-              description: ownershipDescription,
-            });
-            const process = deleteResponseSchema.parse(
-              await this.#request(`/project/${encodeURIComponent(imported.projectId)}`, {
-                method: "DELETE",
-              }),
-            );
-            deletionProcessId = process.id;
-          }
-          await this.#waitForProcess(deletionProcessId);
-          await this.#waitForProjectAbsence(imported.projectId);
-          return {
-            startedAt,
-            completedAt: new Date().toISOString(),
-            providerProjectId: imported.projectId,
-            deleted: true,
-            message: `Zerops deletion process ${deletionProcessId} finished and the exact project endpoint returned projectNotFound.`,
-          };
-        },
+          },
           metadata: {
             executorUrl,
             manifestHashes: JSON.stringify(

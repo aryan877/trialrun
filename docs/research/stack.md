@@ -48,8 +48,8 @@ Decisions:
   both channels explicitly.
 - Fix viewport, locale, timezone, reduced motion, color scheme, and browser
   version to make matched comparisons reproducible.
-- The deterministic oracle evaluates typed assertions. Screenshot pixel distance
-  can be supporting evidence, but rendering variance never becomes the only oracle.
+- Assertions, screenshots, API responses, events, logs, and videos are recorded as evidence for
+  Codex. Screenshot pixel distance never decides a verdict by itself.
 
 ## Next.js and PostgreSQL
 
@@ -73,7 +73,7 @@ Decisions:
 - Claim durable jobs in a short transaction with `FOR UPDATE SKIP LOCKED`, then
   perform external work after commit.
 
-## Codex planner adapter
+## Codex review adapter
 
 Primary sources:
 
@@ -94,8 +94,9 @@ Decisions:
 - Hosted bring-your-own-Codex is one isolated workspace/home per customer. The user
   completes the login flow there. TrialRun must never ask users to paste
   `auth.json`, browser cookies, or raw refresh/access tokens into the web UI.
-- Codex produces only a bounded typed plan. TrialRun's executor performs actions
-  and the deterministic oracle owns the verdict.
+- Codex runs one bounded, live review. It reads the repository, drives the executor's browser and
+  API tools, then returns a typed verdict and evidence citations. The runner verifies that those
+  citations exist and publishes the verdict unchanged.
 
 ## Zerops execution provider
 

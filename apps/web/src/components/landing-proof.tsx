@@ -2,6 +2,7 @@ import Image from "next/image";
 import { ArrowRight, CheckCircle, GithubLogo } from "@phosphor-icons/react/ssr";
 
 import type { PublicProof } from "./public-runtime";
+import { EvidenceVideo } from "./evidence-video";
 
 function shortSha(sha: string): string {
   return sha.slice(0, 7);
@@ -23,17 +24,12 @@ function RecordingFrame({
         <span className="font-medium text-white">{label}</span>
         <code className="ml-auto font-mono text-[11px] text-white/46">{shortSha(sha)}</code>
       </figcaption>
-      <video
-        aria-label={`${label} Chrome recording`}
+      <EvidenceVideo
         className="aspect-video w-full bg-black object-contain"
-        controls
+        label={`${label} Chrome recording`}
         muted
-        playsInline
-        preload="metadata"
-      >
-        <source src={videoUrl} type="video/webm" />
-        Your browser cannot play this WebM recording.
-      </video>
+        src={videoUrl}
+      />
     </figure>
   );
 }
@@ -71,11 +67,7 @@ export function LandingProof({ proof }: { readonly proof: PublicProof }) {
 
         <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
           <RecordingFrame label="Base commit" sha={proof.baseSha} videoUrl={proof.baseWebmUrl} />
-          <RecordingFrame
-            label="Pull request"
-            sha={proof.headSha}
-            videoUrl={proof.headWebmUrl}
-          />
+          <RecordingFrame label="Pull request" sha={proof.headSha} videoUrl={proof.headWebmUrl} />
         </div>
 
         <dl className="mt-4 grid gap-3 border-t border-white/12 pt-4 text-xs leading-5 text-white/54 sm:grid-cols-[0.8fr_1fr_1.2fr]">

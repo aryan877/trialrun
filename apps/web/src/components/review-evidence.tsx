@@ -1,7 +1,9 @@
+import Image from "next/image";
 import { ExternalLink, FileCode2, FileImage, FileText, Film, ShieldCheck } from "lucide-react";
 
 import type { Artifact } from "@trialrun/db";
 
+import { EvidenceVideo } from "@/components/evidence-video";
 import { EmptyState, formatBytes, formatTimestamp } from "@/components/product-ui";
 import type { BrowserRecordingPair, ScreenshotPair } from "@/components/review-evidence-pairing";
 import { cn } from "@/lib/utils";
@@ -68,20 +70,11 @@ function BrowserRecording({
         </span>
       </div>
       {playable ? (
-        <video
-          aria-labelledby={headingId}
+        <EvidenceVideo
           className="aspect-video w-full bg-black object-contain"
-          controls
-          playsInline
-          preload="metadata"
-        >
-          <source src={source} type="video/webm" />
-          Your browser cannot play this WebM recording. You can{" "}
-          <a className="underline" href={source}>
-            open the persisted file
-          </a>
-          .
-        </video>
+          label={`${sideLabel} browser recording`}
+          src={source}
+        />
       ) : (
         <div
           className="flex aspect-video items-center px-4 py-8 text-sm leading-5 text-muted-foreground"
@@ -176,35 +169,37 @@ function ArtifactCapture({
         ) : null}
       </div>
       {artifact ? (
-        <div className="flex min-h-44 flex-col justify-between p-4">
-          <div>
-            <FileImage aria-hidden="true" className="size-7 text-signal-info" strokeWidth={1.5} />
-            <p className="mt-4 text-sm font-medium">{artifact.label}</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Open the exact owner-scoped capture persisted for this side of the review.
-            </p>
-            <a
-              className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-[2px] border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:border-signal-info/50 hover:text-signal-info focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              href={`/api/artifacts/${artifact.id}`}
-              rel="noreferrer"
-              target="_blank"
-            >
-              Open capture
-              <ExternalLink aria-hidden="true" className="size-3.5" />
-            </a>
+        <div>
+          <a
+            className="block bg-black/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:outline-none"
+            href={`/api/artifacts/${artifact.id}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Image
+              alt={`${side === "base" ? "Base" : "Pull request"} application at ${artifact.label}`}
+              className="aspect-[8/5] h-auto w-full object-contain"
+              height={900}
+              src={`/api/artifacts/${artifact.id}`}
+              unoptimized
+              width={1440}
+            />
+          </a>
+          <div className="border-t border-border p-3">
+            <p className="text-xs font-medium">{artifact.label}</p>
+            <dl className="mt-2 grid gap-2 text-[10px] leading-4 text-muted-foreground sm:grid-cols-2">
+              <div>
+                <dt className="uppercase">SHA-256</dt>
+                <dd className="truncate font-mono text-foreground" title={artifact.sha256}>
+                  {artifact.sha256.slice(0, 16)}
+                </dd>
+              </div>
+              <div>
+                <dt className="uppercase">Recorded</dt>
+                <dd className="text-foreground">{formatTimestamp(artifact.createdAt)}</dd>
+              </div>
+            </dl>
           </div>
-          <dl className="mt-5 grid gap-2 text-[10px] leading-4 text-muted-foreground sm:grid-cols-2">
-            <div>
-              <dt className="uppercase">SHA-256</dt>
-              <dd className="truncate font-mono text-foreground" title={artifact.sha256}>
-                {artifact.sha256.slice(0, 16)}
-              </dd>
-            </div>
-            <div>
-              <dt className="uppercase">Recorded</dt>
-              <dd className="text-foreground">{formatTimestamp(artifact.createdAt)}</dd>
-            </div>
-          </dl>
         </div>
       ) : (
         <div

@@ -463,6 +463,7 @@ function locatorFor(page: Page, locator: TestLocator): Locator {
 class PlaywrightSideController implements LiveBrowserSideController {
   readonly #context: BrowserContext;
   readonly #page: Page;
+  readonly #side: ReviewSide;
   readonly #origin: string;
   readonly #video: Video;
   readonly #recordingDirectory: string;
@@ -473,12 +474,14 @@ class PlaywrightSideController implements LiveBrowserSideController {
   constructor(
     context: BrowserContext,
     page: Page,
+    side: ReviewSide,
     origin: string,
     video: Video,
     recordingDirectory: string,
   ) {
     this.#context = context;
     this.#page = page;
+    this.#side = side;
     this.#origin = origin;
     this.#video = video;
     this.#recordingDirectory = recordingDirectory;
@@ -520,14 +523,18 @@ class PlaywrightSideController implements LiveBrowserSideController {
 
   async click(locator: TestLocator, signal: AbortSignal): Promise<void> {
     await this.#run(signal, async () => {
-      await locatorFor(this.#page, locator).click();
+      const target = locatorFor(this.#page, locator);
+      await this.#frameTarget(target, "ACTION");
+      await target.click();
       this.#assertSameOrigin();
     });
   }
 
   async fill(locator: TestLocator, value: string, signal: AbortSignal): Promise<void> {
     await this.#run(signal, async () => {
-      await locatorFor(this.#page, locator).fill(value);
+      const target = locatorFor(this.#page, locator);
+      await this.#frameTarget(target, "ACTION");
+      await target.fill(value);
       this.#assertSameOrigin();
     });
   }
@@ -538,7 +545,9 @@ class PlaywrightSideController implements LiveBrowserSideController {
     signal: AbortSignal,
   ): Promise<number> {
     return this.#run(signal, async () => {
-      const selected = await locatorFor(this.#page, locator).selectOption(
+      const target = locatorFor(this.#page, locator);
+      await this.#frameTarget(target, "ACTION");
+      const selected = await target.selectOption(
         option.kind === "value"
           ? { value: option.value }
           : option.kind === "label"
@@ -552,7 +561,9 @@ class PlaywrightSideController implements LiveBrowserSideController {
 
   async press(locator: TestLocator, key: LivePressKey, signal: AbortSignal): Promise<void> {
     await this.#run(signal, async () => {
-      await locatorFor(this.#page, locator).press(key);
+      const target = locatorFor(this.#page, locator);
+      await this.#frameTarget(target, "ACTION");
+      await target.press(key);
       this.#assertSameOrigin();
     });
   }
@@ -560,14 +571,19 @@ class PlaywrightSideController implements LiveBrowserSideController {
   async isVisible(locator: TestLocator, signal: AbortSignal): Promise<boolean> {
     return this.#run(signal, async () => {
       this.#assertSameOrigin();
-      return locatorFor(this.#page, locator).isVisible();
+      const target = locatorFor(this.#page, locator);
+      const visible = await target.isVisible();
+      if (visible) await this.#frameTarget(target, "RESULT");
+      return visible;
     });
   }
 
   async textContent(locator: TestLocator, signal: AbortSignal): Promise<string> {
     return this.#run(signal, async () => {
       this.#assertSameOrigin();
-      return (await locatorFor(this.#page, locator).textContent()) ?? "";
+      const target = locatorFor(this.#page, locator);
+      await this.#frameTarget(target, "RESULT");
+      return (await target.textContent()) ?? "";
     });
   }
 
@@ -668,6 +684,86 @@ class PlaywrightSideController implements LiveBrowserSideController {
     relativePath(this.#page.url(), this.#origin);
   }
 
+  async #frameTarget(target: Locator, moment: "ACTION" | "RESULT"): Promise<void> {
+    await target.evaluate((element) => {
+      document.querySelector("[data-trialrun-proof-spacer]")?.remove();
+      element.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      const box = element.getBoundingClientRect();
+      const nearDocumentEnd = scrollY + innerHeight >= document.documentElement.scrollHeight - 2;
+      if (nearDocumentEnd && box.bottom > innerHeight * 0.7) {
+        const spacer = document.createElement("div");
+        spacer.dataset.trialrunProofSpacer = "true";
+        spacer.setAttribute("aria-hidden", "true");
+        spacer.style.height = `${Math.round(innerHeight * 0.5)}px`;
+        spacer.style.pointerEvents = "none";
+        document.body.append(spacer);
+        element.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      }
+    });
+    await this.#page.evaluate(
+      ({ label }) =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            document.querySelector("[data-trialrun-proof-marker]")?.remove();
+            document.querySelector("[data-trialrun-proof-style]")?.remove();
+
+            const style = document.createElement("style");
+            style.dataset.trialrunProofStyle = "true";
+            style.textContent = `
+              [data-trialrun-proof-marker] {
+                position: fixed;
+                z-index: 2147483647;
+                pointer-events: none;
+                border: 4px solid var(--trialrun-proof-color);
+                border-radius: 8px;
+                background: color-mix(in srgb, var(--trialrun-proof-color) 10%, transparent);
+                box-shadow: 0 0 0 4px rgba(255,255,255,.96), 0 12px 40px rgba(0,0,0,.32);
+              }
+              [data-trialrun-proof-marker]::before {
+                content: attr(data-label);
+                position: absolute;
+                left: -4px;
+                bottom: calc(100% + 9px);
+                padding: 5px 9px;
+                border-radius: 999px;
+                background: #111114;
+                color: #ffffff;
+                font: 700 12px/1.1 ui-sans-serif, system-ui, sans-serif;
+                letter-spacing: .04em;
+                white-space: nowrap;
+                box-shadow: 0 0 0 2px rgba(255,255,255,.96), 0 4px 16px rgba(0,0,0,.28);
+              }
+            `;
+            document.head.append(style);
+
+            const marker = document.createElement("div");
+            marker.dataset.trialrunProofMarker = "true";
+            marker.dataset.label = label;
+            marker.setAttribute("aria-hidden", "true");
+            document.body.append(marker);
+            resolve();
+          });
+        }),
+      { label: `${this.#side === "base" ? "BASELINE" : "PULL REQUEST"} ${moment}` },
+    );
+    await target.evaluate(
+      (element, color) => {
+        const marker = document.querySelector<HTMLElement>("[data-trialrun-proof-marker]");
+        if (!marker) return;
+        const box = element.getBoundingClientRect();
+        const padding = 10;
+        const left = Math.max(padding, Math.min(box.left - padding, innerWidth - padding - 24));
+        const top = Math.max(36, Math.min(box.top - padding, innerHeight - padding - 24));
+        marker.style.left = `${left}px`;
+        marker.style.top = `${top}px`;
+        marker.style.setProperty("--trialrun-proof-color", color);
+        marker.style.width = `${Math.max(24, Math.min(box.width + padding * 2, innerWidth - left - padding))}px`;
+        marker.style.height = `${Math.max(24, Math.min(box.height + padding * 2, innerHeight - top - padding))}px`;
+      },
+      this.#side === "base" ? "#2357ff" : "#ff4fa3",
+    );
+  }
+
   async #run<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
     signal.throwIfAborted();
     const closeOnAbort = (): void => {
@@ -733,7 +829,7 @@ class PlaywrightLiveBrowserRuntime implements LiveBrowserRuntime {
   }
 
   async createSide(
-    _side: ReviewSide,
+    side: ReviewSide,
     origin: string,
     onEvent: (event: LiveBrowserRawEvent) => void,
   ): Promise<LiveBrowserSideController> {
@@ -754,7 +850,14 @@ class PlaywrightLiveBrowserRuntime implements LiveBrowserRuntime {
       const page = await context.newPage();
       const video = page.video();
       if (!video) throw new Error("Playwright did not create the requested browser recording.");
-      controller = new PlaywrightSideController(context, page, origin, video, recordingDirectory);
+      controller = new PlaywrightSideController(
+        context,
+        page,
+        side,
+        origin,
+        video,
+        recordingDirectory,
+      );
       page.setDefaultTimeout(10_000);
       page.setDefaultNavigationTimeout(20_000);
       page.on("console", (message) => {

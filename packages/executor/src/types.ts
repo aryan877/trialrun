@@ -1,7 +1,4 @@
-import type {
-  ExecutionProviderName,
-  PolicyApprovedRecipe,
-} from "@trialrun/domain";
+import type { ExecutionProviderName, PolicyApprovedRecipe } from "@trialrun/domain";
 
 import type { LiveBrowserEvidence } from "./live-browser";
 
@@ -12,6 +9,15 @@ export interface SourceWorkspace {
   readonly directory: string;
 }
 
+export interface ProvisionServiceProgress {
+  readonly hostname: string;
+  readonly serviceId: string;
+  readonly side: "base" | "head" | "executor";
+  readonly kind: "application" | "dependency" | "executor";
+  readonly zeropsType: string;
+  readonly state: "created" | "deploying" | "ready";
+}
+
 export interface ProvisionInput {
   readonly reviewId: string;
   readonly ownershipTokenHash: string;
@@ -20,6 +26,7 @@ export interface ProvisionInput {
   readonly secrets: Readonly<Record<string, string>>;
   readonly signal?: AbortSignal;
   readonly onProjectCreated?: (providerProjectId: string) => Promise<void>;
+  readonly onServiceProgress?: (progress: ProvisionServiceProgress) => Promise<void>;
 }
 
 export interface TeardownProof {

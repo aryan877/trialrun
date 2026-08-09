@@ -13,6 +13,7 @@ import {
   pairBrowserRecordingArtifacts,
   pairScreenshotArtifacts,
 } from "@/components/review-evidence-pairing";
+import { EvidenceVideo } from "@/components/evidence-video";
 import { formatBytes } from "@/components/product-ui";
 import { database } from "@/lib/db";
 import { loadPublicProofReview } from "@/lib/public-proof";
@@ -176,15 +177,11 @@ export default async function PublicReviewProofPage({
                   <span className="font-semibold">{label}</span>
                   <span className="font-mono text-white/46">{formatBytes(artifact.sizeBytes)}</span>
                 </figcaption>
-                <video
+                <EvidenceVideo
                   className="aspect-[8/5] w-full bg-black object-contain"
-                  controls
-                  playsInline
-                  preload="metadata"
-                >
-                  <source src={url} type="video/webm" />
-                  Your browser cannot play this WebM. <a href={url}>Open the recording</a>.
-                </video>
+                  label={`${label} Chrome recording`}
+                  src={url}
+                />
                 <p
                   className="truncate border-t border-white/10 px-4 py-3 font-mono text-[10px] text-white/42"
                   title={artifact.sha256}

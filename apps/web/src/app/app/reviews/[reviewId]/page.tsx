@@ -2,15 +2,20 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowDown,
   ArrowRight,
+  Bot,
+  Boxes,
   Check,
   Clock3,
+  Database,
   ExternalLink,
   GitCommitHorizontal,
   GitPullRequest,
   ListChecks,
   OctagonAlert,
   ShieldCheck,
+  Server,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
@@ -38,6 +43,8 @@ import {
   pairBrowserRecordingArtifacts,
   pairScreenshotArtifacts,
 } from "@/components/review-evidence-pairing";
+import { ReviewLiveRefresh } from "@/components/review-live-refresh";
+import { ReviewStory } from "@/components/review-story";
 import {
   Definition,
   EmptyState,
@@ -101,6 +108,10 @@ function eventFacts(payload: Readonly<Record<string, unknown>>): readonly {
     ["codeStrengthCount", "Code strengths"],
     ["threadId", "Codex thread"],
     ["jobId", "Job"],
+    ["hostname", "Service"],
+    ["zeropsType", "Type"],
+    ["state", "State"],
+    ["tool", "Action"],
   ] as const;
   for (const [key, label] of fields) {
     const value = payload[key];
@@ -118,9 +129,96 @@ function eventFacts(payload: Readonly<Record<string, unknown>>): readonly {
   return facts;
 }
 
+const toolDescriptions: Readonly<Record<string, string>> = {
+  application_logs: "Read the running application logs",
+  api_assert: "Checked an application API response",
+  api_request: "Called an application API",
+  api_request_pair: "Called the same API on the base and pull request apps",
+  browser_assert: "Checked a result in the live page",
+  browser_checkpoint: "Saved a browser proof frame",
+  browser_checkpoint_pair: "Saved matching base and pull request proof frames",
+  browser_click: "Clicked a control in the live page",
+  browser_count: "Confirmed the browser target was unique",
+  browser_events: "Read browser errors and failed requests",
+  browser_fill: "Filled a field in the live page",
+  browser_navigate: "Opened a page in the running application",
+  browser_observe: "Looked at the current live page",
+  browser_press: "Pressed a key in the live page",
+  browser_reset: "Reset the live application state",
+  browser_select: "Changed a selection in the live page",
+  finish_review: "Finished the investigation and submitted the verdict",
+  repository_changes: "Compared the exact base and pull request commits",
+  repository_diff: "Read a changed file",
+  repository_read: "Read repository code",
+  repository_search: "Searched the repository",
+  repository_tree: "Browsed the repository files",
+  review_status: "Checked the remaining review budget",
+};
+
+function humanEventMessage(event: typeof reviewEvents.$inferSelect): string {
+  if (!event.type.startsWith("agent.tool.")) return event.message;
+  const tool = event.payload["tool"];
+  if (typeof tool !== "string") return event.message;
+  const action = toolDescriptions[tool] ?? `Used ${tool.replaceAll("_", " ")}`;
+  if (event.type === "agent.tool.failed") return `${action}, but the attempt failed safely`;
+  return event.type === "agent.tool.started" ? `${action}…` : action;
+}
+
+const serviceProgressSchema = z.object({
+  hostname: z.string().min(1).max(80),
+  state: z.enum(["created", "deploying", "ready"]),
+});
+
 function proofString(proof: Readonly<Record<string, unknown>> | null, key: string): string | null {
   const value = proof?.[key];
   return typeof value === "string" ? value : null;
+}
+
+type LabState = {
+  readonly label: string;
+  readonly tone: "neutral" | "info" | "running" | "warning" | "success";
+};
+
+function labState(
+  status: (typeof reviews.$inferSelect)["status"],
+  teardownProven: boolean,
+): LabState {
+  if (teardownProven) return { label: "Deleted", tone: "neutral" };
+  if (status === "queued") return { label: "Waiting", tone: "neutral" };
+  if (status === "provisioning") return { label: "Starting", tone: "info" };
+  if (status === "tearing_down") return { label: "Deleting", tone: "warning" };
+  if (["building", "planning", "running", "comparing", "publishing"].includes(status)) {
+    return { label: "Ready", tone: "success" };
+  }
+  return { label: "Unverified", tone: "warning" };
+}
+
+function LabService({
+  detail,
+  hostname,
+  kind,
+  state,
+}: {
+  readonly detail: string;
+  readonly hostname: string;
+  readonly kind: "app" | "data" | "executor";
+  readonly state: LabState;
+}) {
+  const Icon = kind === "app" ? Server : kind === "data" ? Database : Boxes;
+  return (
+    <article className="flex min-w-0 items-start gap-3 border-b border-border p-3 last:border-b-0">
+      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-signal-info" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-mono text-xs font-semibold" title={hostname}>
+          {hostname}
+        </p>
+        <p className="mt-1 truncate text-xs text-muted-foreground" title={detail}>
+          {detail}
+        </p>
+      </div>
+      <StateBadge tone={state.tone}>{state.label}</StateBadge>
+    </article>
+  );
 }
 
 function CommitSide({
@@ -214,8 +312,19 @@ export default async function ReviewDetail({
   const eventCondition = cursor
     ? and(eq(reviewEvents.reviewId, owned.review.id), lt(reviewEvents.id, cursor))
     : eq(reviewEvents.reviewId, owned.review.id);
-  const [eventRows, findingRows, artifactRows, jobRows] = await Promise.all([
+  const [eventRows, serviceProgressRows, findingRows, artifactRows, jobRows] = await Promise.all([
     db.select().from(reviewEvents).where(eventCondition).orderBy(desc(reviewEvents.id)).limit(101),
+    db
+      .select({ payload: reviewEvents.payload })
+      .from(reviewEvents)
+      .where(
+        and(
+          eq(reviewEvents.reviewId, owned.review.id),
+          eq(reviewEvents.type, "environment.service"),
+        ),
+      )
+      .orderBy(desc(reviewEvents.id))
+      .limit(60),
     db
       .select()
       .from(findings)
@@ -241,6 +350,36 @@ export default async function ReviewDetail({
   const screenshotPairs = pairScreenshotArtifacts(artifactRows);
   const recordingPairs = pairBrowserRecordingArtifacts(artifactRows);
   const liveEvidenceSealed = artifactRows.some((artifact) => artifact.kind === "live_evidence");
+  const liveEvidenceArtifact = artifactRows.find((artifact) => artifact.kind === "live_evidence");
+  const apiResponseCount =
+    typeof liveEvidenceArtifact?.metadata["apiResponseCount"] === "number"
+      ? liveEvidenceArtifact.metadata["apiResponseCount"]
+      : 0;
+  const completedTools = visibleEvents
+    .filter((event) => event.type === "agent.tool.completed")
+    .map((event) => event.payload["tool"])
+    .filter((tool): tool is string => typeof tool === "string");
+  const repositoryToolCount = completedTools.filter(
+    (tool) => tool.startsWith("repository_") || tool === "application_logs",
+  ).length;
+  const browserToolCount = completedTools.filter(
+    (tool) => tool.startsWith("browser_") || tool === "api_assert",
+  ).length;
+  const questionAnswers = (owned.review.agentTerminalReport?.questionAnswers ?? []).map(
+    (answer) => ({
+      answer: answer.answer,
+      question:
+        owned.review.agentMission?.questions.find(({ id }) => id === answer.questionId)?.question ??
+        answer.questionId.replaceAll("-", " "),
+    }),
+  );
+  const resultTitle =
+    findingRows[0]?.title ??
+    (owned.review.verdict === "pass"
+      ? "No blocking behavior difference was reproduced"
+      : owned.review.verdict === "inconclusive"
+        ? "The run did not produce a complete verdict"
+        : undefined);
   const job = jobRows[0];
   const proof = owned.review.teardownProof;
   const proofDeleted = proof?.deleted === true;
@@ -255,10 +394,37 @@ export default async function ReviewDetail({
   const teardownCompleted =
     proofString(proof, "completedAt") ?? owned.review.teardownCompletedAt?.toISOString() ?? null;
   const terminal = ["completed", "inconclusive", "cancelled"].includes(owned.review.status);
+  const recipe = owned.recipe.approvedRecipe;
+  const runtimeState = labState(owned.review.status, teardownProven);
+  const reportedServiceStates = new Map<string, LabState>();
+  for (const row of serviceProgressRows) {
+    const parsed = serviceProgressSchema.safeParse(row.payload);
+    if (!parsed.success || reportedServiceStates.has(parsed.data.hostname)) continue;
+    reportedServiceStates.set(
+      parsed.data.hostname,
+      parsed.data.state === "ready"
+        ? { label: "Ready", tone: "success" }
+        : { label: "Starting", tone: "info" },
+    );
+  }
+  const stateForService = (hostname: string): LabState =>
+    teardownProven || owned.review.status === "tearing_down"
+      ? runtimeState
+      : (reportedServiceStates.get(hostname) ?? runtimeState);
+  const codexState: LabState = owned.review.agentTerminalReport
+    ? { label: "Finished", tone: "success" }
+    : owned.review.agentThreadId
+      ? { label: "Investigating", tone: "running" }
+      : ["planning", "running"].includes(owned.review.status)
+        ? { label: "Starting", tone: "info" }
+        : terminal
+          ? { label: "Stopped", tone: "warning" }
+          : { label: "Waiting", tone: "neutral" };
   const githubPullUrl = `https://github.com/${encodeURIComponent(owned.repository.owner)}/${encodeURIComponent(owned.repository.name)}/pull/${owned.review.pullNumber}`;
 
   return (
     <>
+      <ReviewLiveRefresh active={!terminal} />
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
@@ -278,8 +444,9 @@ export default async function ReviewDetail({
         }
         description={
           <span>
-            {owned.repository.owner}/{owned.repository.name} · recipe v{owned.recipe.version} ·{" "}
-            {owned.review.provider === "local" ? "Local execution" : "Zerops execution"}
+            {owned.repository.owner}/{owned.repository.name} · confirmed run plan v
+            {owned.recipe.version} ·{" "}
+            {owned.review.provider === "local" ? "ran locally" : "ran on Zerops"}
           </span>
         }
         eyebrow={`Review ${owned.review.id.slice(0, 8)}`}
@@ -295,9 +462,9 @@ export default async function ReviewDetail({
                 <h2 className="mt-4 text-xl leading-7 font-medium tracking-[-0.025em]">
                   {owned.review.verdict
                     ? owned.review.verdict === "pass"
-                      ? "Base and pull request matched"
+                      ? (resultTitle ?? "Base and pull request matched")
                       : owned.review.verdict === "fail"
-                        ? "Behavioral divergence reproduced"
+                        ? (resultTitle ?? "Codex reproduced a real behavior difference")
                         : "The evidence was inconclusive"
                     : "Review execution in progress"}
                 </h2>
@@ -330,155 +497,258 @@ export default async function ReviewDetail({
           </dl>
         </section>
 
-        <section className="space-y-4" aria-labelledby="commits">
-          <SectionHeading
-            description="These are the exact immutable SHAs recorded when the review was queued and re-verified against GitHub before execution."
-            id="commits"
-            title="Matched commit evidence"
-          />
-          <div className="grid overflow-hidden rounded-[4px] border border-border divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
-            <CommitSide
-              removed={teardownProven}
-              sha={owned.review.baseSha}
-              side="base"
-              url={owned.review.baseUrl}
-            />
-            <CommitSide
-              removed={teardownProven}
-              sha={owned.review.headSha}
-              side="head"
-              url={owned.review.headUrl}
-            />
-          </div>
-        </section>
+        <ReviewStory
+          apiResponseCount={apiResponseCount}
+          baseSha={owned.review.baseSha}
+          browserToolCount={browserToolCount}
+          findingTitle={resultTitle}
+          headSha={owned.review.headSha}
+          questionAnswers={questionAnswers}
+          repositoryToolCount={repositoryToolCount}
+          summary={owned.review.agentTerminalReport?.evidenceSummary}
+          teardownMessage={teardownMessage ?? undefined}
+        />
 
-        <section className="space-y-4" aria-labelledby="mission">
-          <SectionHeading
-            description="Codex receives goals, questions, narrow tools, and hard budgets—not a prerecorded click list. It inspects the change and adapts against both running commits."
-            id="mission"
-            title="Live Codex mission"
-          />
-          {owned.review.agentMission ? (
-            <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-              <div className="panel-surface p-4">
-                <div className="flex items-center gap-2">
-                  <ListChecks aria-hidden="true" className="size-4 text-signal-info" />
-                  <h3 className="text-sm font-medium">{owned.review.agentMission.title}</h3>
+        <details className="group overflow-hidden rounded-[4px] border border-border">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-black/10 px-4 py-4 text-base font-medium outline-none transition-colors hover:bg-black/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            <span>
+              How TrialRun ran this review
+              <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                Zerops services, exact commits, Codex mission, and limits
+              </span>
+            </span>
+            <ArrowDown className="size-4 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-10 border-t border-border p-4 sm:p-5">
+            <section className="space-y-4" aria-labelledby="live-lab">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <SectionHeading
+                  description="The exact services TrialRun asked Zerops to run for this review. While the review is active, this page refreshes every five seconds. Ready means every imported service, both apps, and the executor passed TrialRun's readiness gate."
+                  id="live-lab"
+                  title="Live Zerops review lab"
+                />
+                <div className="flex shrink-0 items-center gap-2 pb-0.5">
+                  <Bot aria-hidden="true" className="size-4 text-signal-info" />
+                  <span className="text-xs text-muted-foreground">Codex</span>
+                  <StateBadge tone={codexState.tone}>{codexState.label}</StateBadge>
                 </div>
-                <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  One context-rich Codex thread reads the exact base/head snapshots, investigates
-                  the live apps, and writes the review verdict. TrialRun verifies its citations and
-                  recorded evidence before publishing it unchanged.
-                </p>
-                <dl className="mt-3">
-                  <Definition term="Codex thread" mono>
-                    {owned.review.agentThreadId ?? "Starts after both apps are ready"}
-                  </Definition>
-                  <Definition term="Tool calls">
-                    {owned.review.agentRunMetrics
-                      ? `${owned.review.agentRunMetrics.toolCalls} / ${owned.review.agentMission.budgets.maxToolCalls}`
-                      : `Up to ${owned.review.agentMission.budgets.maxToolCalls}`}
-                  </Definition>
-                  <Definition term="Time limit">
-                    {Math.round(owned.review.agentMission.budgets.maxDurationSeconds / 60)} minutes
-                  </Definition>
-                  <Definition term="Checkpoint limit">
-                    {owned.review.agentMission.budgets.maxCheckpoints}
-                  </Definition>
-                  <Definition term="Allowed test-secret names">
-                    {owned.review.agentMission.allowedSecretNames.length
-                      ? owned.review.agentMission.allowedSecretNames.join(", ")
-                      : "None"}
-                  </Definition>
-                  {owned.review.agentRunMetrics ? (
-                    <Definition term="Tokens">
-                      {owned.review.agentRunMetrics.usage.input_tokens.toLocaleString()} in ·{" "}
-                      {owned.review.agentRunMetrics.usage.output_tokens.toLocaleString()} out
-                    </Definition>
-                  ) : null}
-                </dl>
               </div>
-              <div className="overflow-hidden rounded-[4px] border border-border">
-                <ol>
-                  {owned.review.agentMission.goals.map((goal, index) => (
-                    <li
-                      className="grid grid-cols-[40px_minmax(0,1fr)] border-b border-border last:border-b-0"
-                      key={goal.id}
-                    >
-                      <span className="flex items-center justify-center border-r border-border font-mono text-[10px] text-muted-foreground">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <div className="px-3 py-3">
-                        <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-info uppercase">
-                          {goal.kind.replaceAll("_", " ")} · {goal.priority}
+              {recipe ? (
+                <div className="grid overflow-hidden rounded-[4px] border border-border lg:grid-cols-[1fr_1fr_0.72fr]">
+                  {(["base", "head"] as const).map((side) => (
+                    <div className="border-b border-border lg:border-r lg:border-b-0" key={side}>
+                      <div className="border-b border-border bg-black/10 px-3 py-2.5">
+                        <p className="text-xs font-semibold">
+                          {side === "base" ? "Base commit system" : "Pull request system"}
                         </p>
-                        <p className="mt-1 text-sm leading-5">{goal.objective}</p>
+                        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                          {(side === "base" ? owned.review.baseSha : owned.review.headSha).slice(
+                            0,
+                            12,
+                          )}
+                        </p>
                       </div>
-                    </li>
-                  ))}
-                </ol>
-                {owned.review.agentTerminalReport ? (
-                  <div className="border-t border-border bg-black/10 p-4">
-                    <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-running uppercase">
-                      Validated agent handoff ·{" "}
-                      {owned.review.agentTerminalReport.termination.replaceAll("_", " ")}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {owned.review.agentTerminalReport.evidenceSummary}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-muted-foreground">
-                      <span>
-                        {owned.review.agentTerminalReport.evidenceIds.length} cited evidence IDs
-                      </span>
-                      <span>
-                        {owned.review.agentTerminalReport.codeStrengths.length} code strengths
-                      </span>
-                      <span>
-                        {owned.review.agentTerminalReport.codeRiskFindings.length} code risks
-                      </span>
-                    </div>
-                    {owned.review.agentTerminalReport.limitations.length ? (
-                      <ul className="mt-3 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
-                        {owned.review.agentTerminalReport.limitations.map((limitation) => (
-                          <li key={limitation}>{limitation}</li>
+                      <div>
+                        {recipe.applications.map((service) => (
+                          <LabService
+                            detail={`${service.zeropsType} · port ${service.port} · health ${service.healthPath}`}
+                            hostname={`${side}${service.name}`}
+                            key={`${side}-application-${service.name}`}
+                            kind="app"
+                            state={stateForService(`${side}${service.name}`)}
+                          />
                         ))}
-                      </ul>
+                        {recipe.dependencies.map((service) => (
+                          <LabService
+                            detail={service.zeropsType}
+                            hostname={`${side}${service.name}`}
+                            key={`${side}-dependency-${service.name}`}
+                            kind="data"
+                            state={stateForService(`${side}${service.name}`)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div>
+                    <div className="border-b border-border bg-black/10 px-3 py-2.5">
+                      <p className="text-xs font-semibold">Shared test executor</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        Lives inside the same private project
+                      </p>
+                    </div>
+                    <LabService
+                      detail="Chrome · HTTP API · app logs · WebM"
+                      hostname="executor"
+                      kind="executor"
+                      state={stateForService("executor")}
+                    />
+                    <div className="border-t border-border p-3 text-xs leading-5 text-muted-foreground">
+                      Codex controls this executor with narrow review tools. It never receives
+                      Zerops or GitHub credentials.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <EmptyState
+                  description="The confirmed repository run plan is missing, so TrialRun cannot truthfully list a review lab."
+                  title="No approved service plan"
+                />
+              )}
+            </section>
+
+            <section className="space-y-4" aria-labelledby="commits">
+              <SectionHeading
+                description="These are the exact immutable SHAs recorded when the review was queued and re-verified against GitHub before execution."
+                id="commits"
+                title="Matched commit evidence"
+              />
+              <div className="grid overflow-hidden rounded-[4px] border border-border divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0">
+                <CommitSide
+                  removed={teardownProven}
+                  sha={owned.review.baseSha}
+                  side="base"
+                  url={owned.review.baseUrl}
+                />
+                <CommitSide
+                  removed={teardownProven}
+                  sha={owned.review.headSha}
+                  side="head"
+                  url={owned.review.headUrl}
+                />
+              </div>
+            </section>
+
+            <section className="space-y-4" aria-labelledby="mission">
+              <SectionHeading
+                description="Codex receives goals, questions, narrow tools, and hard budgets—not a prerecorded click list. It inspects the change and adapts against both running commits."
+                id="mission"
+                title="Live Codex mission"
+              />
+              {owned.review.agentMission ? (
+                <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+                  <div className="panel-surface p-4">
+                    <div className="flex items-center gap-2">
+                      <ListChecks aria-hidden="true" className="size-4 text-signal-info" />
+                      <h3 className="text-sm font-medium">{owned.review.agentMission.title}</h3>
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                      One context-rich Codex thread reads the exact base/head snapshots,
+                      investigates the live apps, and writes the review verdict. TrialRun verifies
+                      its citations and recorded evidence before publishing it unchanged.
+                    </p>
+                    <dl className="mt-3">
+                      <Definition term="Codex thread" mono>
+                        {owned.review.agentThreadId ?? "Starts after both apps are ready"}
+                      </Definition>
+                      <Definition term="Tool calls">
+                        {owned.review.agentRunMetrics
+                          ? `${owned.review.agentRunMetrics.toolCalls} / ${owned.review.agentMission.budgets.maxToolCalls}`
+                          : `Up to ${owned.review.agentMission.budgets.maxToolCalls}`}
+                      </Definition>
+                      <Definition term="Time limit">
+                        {Math.round(owned.review.agentMission.budgets.maxDurationSeconds / 60)}{" "}
+                        minutes
+                      </Definition>
+                      <Definition term="Checkpoint limit">
+                        {owned.review.agentMission.budgets.maxCheckpoints}
+                      </Definition>
+                      <Definition term="Allowed test-secret names">
+                        {owned.review.agentMission.allowedSecretNames.length
+                          ? owned.review.agentMission.allowedSecretNames.join(", ")
+                          : "None"}
+                      </Definition>
+                      {owned.review.agentRunMetrics ? (
+                        <Definition term="Tokens">
+                          {owned.review.agentRunMetrics.usage.input_tokens.toLocaleString()} in ·{" "}
+                          {owned.review.agentRunMetrics.usage.output_tokens.toLocaleString()} out
+                        </Definition>
+                      ) : null}
+                    </dl>
+                  </div>
+                  <div className="overflow-hidden rounded-[4px] border border-border">
+                    <ol>
+                      {owned.review.agentMission.goals.map((goal, index) => (
+                        <li
+                          className="grid grid-cols-[40px_minmax(0,1fr)] border-b border-border last:border-b-0"
+                          key={goal.id}
+                        >
+                          <span className="flex items-center justify-center border-r border-border font-mono text-[10px] text-muted-foreground">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <div className="px-3 py-3">
+                            <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-info uppercase">
+                              {goal.kind.replaceAll("_", " ")} · {goal.priority}
+                            </p>
+                            <p className="mt-1 text-sm leading-5">{goal.objective}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                    {owned.review.agentTerminalReport ? (
+                      <div className="border-t border-border bg-black/10 p-4">
+                        <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-running uppercase">
+                          Validated agent handoff ·{" "}
+                          {owned.review.agentTerminalReport.termination.replaceAll("_", " ")}
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          {owned.review.agentTerminalReport.evidenceSummary}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-muted-foreground">
+                          <span>
+                            {owned.review.agentTerminalReport.evidenceIds.length} cited evidence IDs
+                          </span>
+                          <span>
+                            {owned.review.agentTerminalReport.codeStrengths.length} code strengths
+                          </span>
+                          <span>
+                            {owned.review.agentTerminalReport.codeRiskFindings.length} code risks
+                          </span>
+                        </div>
+                        {owned.review.agentTerminalReport.limitations.length ? (
+                          <ul className="mt-3 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+                            {owned.review.agentTerminalReport.limitations.map((limitation) => (
+                              <li key={limitation}>{limitation}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              description="The runner persists the mission after both immutable applications pass readiness checks. Codex then chooses its next action from live observations."
-              title="Live mission has not started"
-            />
-          )}
-        </section>
+                </div>
+              ) : (
+                <EmptyState
+                  description="The runner persists the mission after both immutable applications pass readiness checks. Codex then chooses its next action from live observations."
+                  title="Live mission has not started"
+                />
+              )}
+            </section>
+          </div>
+        </details>
 
         <section className="space-y-4" aria-labelledby="browser-recordings">
           <SectionHeading
-            description="The pull request recording is the primary behavior proof. The corresponding base recording sits beside it on wide screens and below it on smaller screens. Both stream from the existing owner-scoped artifact route."
+            description="Watch Codex drive the pull request and its baseline. Playback starts at 2×; the original, hash-checked WebM remains available."
             id="browser-recordings"
-            title="Recorded browser proof"
+            title="Watch the review happen"
           />
           <BrowserRecordingEvidence evidenceSealed={liveEvidenceSealed} pairs={recordingPairs} />
         </section>
 
         <section className="space-y-4" aria-labelledby="matched-captures">
           <SectionHeading
-            description="Checkpoint rows are paired by their recorded base and pull request labels. SHA-256 hashes identify the exact persisted files."
+            description="Codex chose this proof moment. TrialRun centered and marked the checked element before saving both frames."
             id="matched-captures"
-            title="Base / pull request captures"
+            title="Screenshots at the proof moment"
           />
           <MatchedEvidence pairs={screenshotPairs} />
         </section>
 
         <section className="space-y-4" aria-labelledby="findings">
           <SectionHeading
-            description="Codex writes the findings and verdict. TrialRun checks every file/line citation and evidence ID against this exact run; code-only risks remain visibly unproven."
+            description="Codex writes the explanation and verdict. TrialRun only confirms that its cited code lines and recorded evidence really belong to this run."
             id="findings"
-            title="Findings"
+            title="What Codex found"
           />
           {findingRows.length === 0 ? (
             <EmptyState
@@ -531,19 +801,27 @@ export default async function ReviewDetail({
         </section>
 
         <section className="space-y-4" aria-labelledby="artifacts">
-          <SectionHeading
-            description="The durable artifact ledger records storage identity, side, size, media kind, and integrity hash."
-            id="artifacts"
-            title="Artifact ledger"
-          />
-          <ArtifactLedger artifacts={artifactRows} />
+          <details className="group overflow-hidden rounded-[4px] border border-border">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-black/10 px-4 py-4 text-base font-medium outline-none transition-colors hover:bg-black/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <span>
+                Original files and hashes
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                  Seven persisted evidence files for audit and download
+                </span>
+              </span>
+              <ArrowDown className="size-4 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-border p-4">
+              <ArtifactLedger artifacts={artifactRows} />
+            </div>
+          </details>
         </section>
 
         <section className="space-y-4" aria-labelledby="teardown">
           <SectionHeading
-            description="A pass is not complete until deletion of the exact review environment is positively recorded."
+            description="TrialRun copied the evidence, deleted this review's exact Zerops project, and checked that it no longer exists."
             id="teardown"
-            title="Teardown proof"
+            title="The test environment is gone"
           />
           <div className="grid overflow-hidden rounded-[4px] border border-border lg:grid-cols-[minmax(0,1fr)_360px]">
             <div className="border-b border-border p-4 sm:p-5 lg:border-r lg:border-b-0">
@@ -605,86 +883,97 @@ export default async function ReviewDetail({
         </section>
 
         <section className="space-y-4 pb-8" aria-labelledby="events-heading" id="events">
-          <SectionHeading
-            description="Append-only review events, shown oldest to newest within this cursor page."
-            id="events-heading"
-            title="Event timeline"
-          />
-          {visibleEvents.length === 0 ? (
-            <EmptyState
-              actionLabel={cursor ? "Back to newest events" : undefined}
-              description={
-                cursor
-                  ? "There are no events before this cursor."
-                  : "The runner has not appended an event for this review yet."
-              }
-              href={cursor ? `/app/reviews/${owned.review.id}#events` : undefined}
-              title={cursor ? "Start of event history" : "No review events"}
-            />
-          ) : (
-            <div>
-              <ol className="overflow-hidden rounded-[4px] border border-border">
-                {visibleEvents.map((event) => {
-                  const facts = eventFacts(event.payload);
-                  return (
-                    <li
-                      className="grid border-b border-border last:border-b-0 sm:grid-cols-[150px_minmax(0,1fr)]"
-                      key={event.id}
-                    >
-                      <div className="border-b border-border bg-black/10 px-3 py-3 sm:border-r sm:border-b-0">
-                        <p className="font-mono text-[10px] text-signal-info">{event.type}</p>
-                        <time
-                          className="mt-1 block text-[10px] leading-4 text-muted-foreground"
-                          dateTime={event.createdAt.toISOString()}
+          <details className="group overflow-hidden rounded-[4px] border border-border">
+            <summary
+              className="flex cursor-pointer list-none items-center justify-between gap-4 bg-black/10 px-4 py-4 text-base font-medium outline-none transition-colors hover:bg-black/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+              id="events-heading"
+            >
+              <span>
+                Technical event timeline
+                <span className="mt-1 block text-xs font-normal text-muted-foreground">
+                  Raw worker, tool, GitHub, and teardown events
+                </span>
+              </span>
+              <ArrowDown className="size-4 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="border-t border-border p-4">
+              {visibleEvents.length === 0 ? (
+                <EmptyState
+                  actionLabel={cursor ? "Back to newest events" : undefined}
+                  description={
+                    cursor
+                      ? "There are no events before this cursor."
+                      : "The runner has not appended an event for this review yet."
+                  }
+                  href={cursor ? `/app/reviews/${owned.review.id}#events` : undefined}
+                  title={cursor ? "Start of event history" : "No review events"}
+                />
+              ) : (
+                <div>
+                  <ol className="overflow-hidden rounded-[4px] border border-border">
+                    {visibleEvents.map((event) => {
+                      const facts = eventFacts(event.payload);
+                      return (
+                        <li
+                          className="grid border-b border-border last:border-b-0 sm:grid-cols-[150px_minmax(0,1fr)]"
+                          key={event.id}
                         >
-                          {formatTimestamp(event.createdAt)}
-                        </time>
-                      </div>
-                      <div className="px-3 py-3">
-                        <p className="text-sm leading-5">{event.message}</p>
-                        {facts.length > 0 ? (
-                          <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                            {facts.map((fact) => (
-                              <div
-                                className="flex min-w-0 gap-1.5 text-[10px] leading-4"
-                                key={fact.label}
-                              >
-                                <dt className="text-muted-foreground">{fact.label}</dt>
-                                <dd className="max-w-80 truncate font-mono" title={fact.value}>
-                                  {fact.value}
-                                </dd>
-                              </div>
-                            ))}
-                          </dl>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-              <div className="mt-3 flex items-center justify-between gap-3">
-                {cursor ? (
-                  <Button asChild className="rounded-[2px]" size="sm" variant="ghost">
-                    <Link href={`/app/reviews/${owned.review.id}#events`}>
-                      Back to newest events
-                    </Link>
-                  </Button>
-                ) : (
-                  <span />
-                )}
-                {hasOlderEvents && nextEventCursor ? (
-                  <Button asChild className="rounded-[2px]" size="sm" variant="outline">
-                    <Link
-                      href={`/app/reviews/${owned.review.id}?beforeEvent=${nextEventCursor}#events`}
-                    >
-                      Older events
-                      <ArrowRight aria-hidden="true" data-icon="inline-end" />
-                    </Link>
-                  </Button>
-                ) : null}
-              </div>
+                          <div className="border-b border-border bg-black/10 px-3 py-3 sm:border-r sm:border-b-0">
+                            <p className="font-mono text-[10px] text-signal-info">{event.type}</p>
+                            <time
+                              className="mt-1 block text-[10px] leading-4 text-muted-foreground"
+                              dateTime={event.createdAt.toISOString()}
+                            >
+                              {formatTimestamp(event.createdAt)}
+                            </time>
+                          </div>
+                          <div className="px-3 py-3">
+                            <p className="text-sm leading-5">{humanEventMessage(event)}</p>
+                            {facts.length > 0 ? (
+                              <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                                {facts.map((fact) => (
+                                  <div
+                                    className="flex min-w-0 gap-1.5 text-[10px] leading-4"
+                                    key={fact.label}
+                                  >
+                                    <dt className="text-muted-foreground">{fact.label}</dt>
+                                    <dd className="max-w-80 truncate font-mono" title={fact.value}>
+                                      {fact.value}
+                                    </dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    {cursor ? (
+                      <Button asChild className="rounded-[2px]" size="sm" variant="ghost">
+                        <Link href={`/app/reviews/${owned.review.id}#events`}>
+                          Back to newest events
+                        </Link>
+                      </Button>
+                    ) : (
+                      <span />
+                    )}
+                    {hasOlderEvents && nextEventCursor ? (
+                      <Button asChild className="rounded-[2px]" size="sm" variant="outline">
+                        <Link
+                          href={`/app/reviews/${owned.review.id}?beforeEvent=${nextEventCursor}#events`}
+                        >
+                          Older events
+                          <ArrowRight aria-hidden="true" data-icon="inline-end" />
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </details>
         </section>
       </div>
     </>

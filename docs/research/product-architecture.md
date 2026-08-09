@@ -6,7 +6,7 @@ This document records implementation decisions that depend on external products.
 
 ## Product proof
 
-TrialRun reviews a real GitHub pull request by deploying its immutable base and head commits into one disposable Zerops project, giving one context-rich Codex session live browser/API/log control over both, calculating the verdict from recorded assertions, preserving matched evidence, and proving that the project was deleted.
+TrialRun reviews a real GitHub pull request by deploying its immutable base and head commits into one disposable Zerops project, giving one context-rich Codex session live browser/API/log control over both, publishing Codex's evidence-backed verdict, and proving that the project was deleted.
 
 The judgeable happy path is:
 
@@ -16,9 +16,9 @@ The judgeable happy path is:
 4. Deterministic policy rejects unsafe or unsupported infrastructure.
 5. A maintainer confirms the first version of the recipe.
 6. A PostgreSQL worker creates exactly one disposable Zerops project.
-7. TrialRun uploads the private source for both SHAs with `zcli service push`.
+7. TrialRun uploads the private source for both SHAs with an explicit-ID `zcli push`.
 8. After readiness, Codex starts a live observe-act-observe loop through the in-project executor and investigates both private base and head services.
-9. TrialRun publishes screenshots, trace/video where safe, logs, assertions, and the first divergence to a GitHub Check.
+9. TrialRun verifies Codex's cited screenshots, recordings, logs, assertions, and API responses, then publishes Codex's verdict to a GitHub Check.
 10. TrialRun copies sanitized artifacts out and deletes the exact project it created.
 
 No fixed application, fake SHA, canned finding, or simulated cloud event is part of the product path.
@@ -29,7 +29,7 @@ No fixed application, fake SHA, canned finding, or simulated cloud event is part
 
 - A Zerops project is a group of runtime and managed services on a dedicated private network. Services address each other by hostname.
 - Zerops exposes runtimes for Node.js, Bun, Deno, Python, Go, Rust, Java, .NET, PHP, Elixir, Gleam, Ruby, Nginx/static, Ubuntu, Alpine, and Docker, plus managed PostgreSQL, MariaDB, Valkey, KeyDB, Elasticsearch, Typesense, Meilisearch, Qdrant, NATS, Kafka, ClickHouse, object storage, and shared storage.
-- `zcli service push` builds and deploys a local working directory. It accepts explicit project, service, setup, working-directory, and no-git options. TrialRun uses explicit IDs and paths and never relies on ambient config.
+- `zcli push` builds and deploys a local working directory. TrialRun passes explicit project, service, setup, working-directory, and no-git values and never relies on ambient config.
 - `buildFromGit` is useful for public source. Private GitHub source is instead downloaded with a short-lived GitHub App installation token and uploaded from a temporary directory through zCLI so a credential never appears in an import document or Git URL.
 - A `zcp@1` service can be a private remote workspace with bundled coding agents, Cloud IDE, project-scoped Zerops MCP access, and private service connectivity. The human signs into their own agent provider inside that workspace.
 - `ZCP_API_KEY` authorizes the Zerops project surface. It is not an OpenAI/Codex credential and must not be mistaken for one.
@@ -100,10 +100,10 @@ The first complete local and Zerops review may use the managed mode. The workspa
 - Its initial typed mission contains goals, budgets, allowed secret names, and capabilities. It is not a fixed sequence of browser steps.
 - Narrow stateful tools let it observe DOM/accessibility state, count semantic locators, act, inspect console/network/application logs, switch/reset sides, and capture checkpoints. Arbitrary JavaScript, shell, filesystem, infrastructure, and unrestricted URL access remain unavailable.
 - The evidence recorder persists the full causal action/observation trail.
-- The deterministic oracle compares reproducible assertions and computes the verdict.
-- The explainer turns that evidence into a concise Check summary but cannot alter the verdict.
+- Codex returns one typed review with its verdict, explanation, code citations, and recorded evidence IDs.
+- The runner verifies only provenance and delivery facts: exact mission/commits, real evidence IDs, valid source lines, artifact hashes, GitHub publication, and teardown. It does not reinterpret Codex's tests or change one semantic verdict into another.
 
-This avoids a disconnected test agent with no review context without granting Codex infrastructure control or self-grading authority. It can reason and browse live; the runner provisions/deletes and the oracle grades.
+This avoids a disconnected test agent with no review context while keeping cloud authority out of the model. Codex reasons, tests, and reviews; the runner provisions, verifies the proof trail, publishes, and deletes.
 
 TrialRun publishes two visibly different lanes. A **code-risk** finding needs exact repository citations and an explanation but is not called reproduced. A **runtime regression** must link that hypothesis to ordered live actions, matched base/head checkpoints or assertions, and the first behavioral divergence. Codex can say which code is sound or risky across the repository, then spend its live budget proving the highest-value concerns.
 
@@ -163,7 +163,8 @@ TrialRun applies that lesson but does not clone TREX. Its hard differentiation i
 - immutable base-versus-head execution of the same journey;
 - a maintainer-confirmed, policy-compiled Zerops service graph;
 - isolated managed dependencies for each side;
-- a deterministic oracle rather than model self-grading;
+- one context-rich Codex reviewer instead of a separate context-poor test agent;
+- mechanical proof verification without a second semantic grader;
 - explicit teardown evidence as part of the verdict;
 - an optional user-owned Codex subscription inside a dedicated Zerops workspace.
 
