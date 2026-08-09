@@ -75,10 +75,19 @@ export default async function PublicReviewProofPage({
   ]);
   if (!repository) notFound();
 
+  const terminalReport = agentTerminalReportSchema.safeParse(review.agentTerminalReport);
+  const citedEvidenceIds = new Set(terminalReport.success ? terminalReport.data.evidenceIds : []);
+  const citedScreenshotRows = artifactRows.filter(({ kind, metadata }) => {
+    const sourceArtifactId = metadata["artifactId"];
+    return (
+      kind !== "screenshot" ||
+      (typeof sourceArtifactId === "string" && citedEvidenceIds.has(sourceArtifactId))
+    );
+  });
   const recording = pairBrowserRecordingArtifacts(artifactRows).find(
     ({ base, head }) => base?.mediaType === "video/webm" && head?.mediaType === "video/webm",
   );
-  const screenshot = pairScreenshotArtifacts(artifactRows).find(
+  const screenshot = pairScreenshotArtifacts(citedScreenshotRows).findLast(
     ({ base, head }) => base?.mediaType === "image/png" && head?.mediaType === "image/png",
   );
   if (!recording?.base || !recording.head || !screenshot?.base || !screenshot.head) notFound();
@@ -106,7 +115,6 @@ export default async function PublicReviewProofPage({
   const liveMetadata = liveEvidenceMetadataSchema.safeParse(
     artifactRows.find(({ kind }) => kind === "live_evidence")?.metadata,
   );
-  const terminalReport = agentTerminalReportSchema.safeParse(review.agentTerminalReport);
   const summary = terminalReport.success
     ? terminalReport.data.evidenceSummary
     : "Codex completed an evidence-backed review of the running pull request.";

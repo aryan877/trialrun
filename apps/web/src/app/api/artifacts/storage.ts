@@ -416,13 +416,15 @@ export function artifactResponseHeaders(input: {
     "Cache-Control": "private, no-store, max-age=0",
     "Content-Disposition": `${disposition}; filename="${input.fileName}"`,
     "Content-Length": String(input.range?.length ?? input.size),
-    "Content-Security-Policy": "default-src 'none'; sandbox",
     "Content-Type": mediaType,
     "Cross-Origin-Resource-Policy": "same-origin",
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "X-Robots-Tag": "noindex, nofollow, noarchive",
   });
+  if (mediaType !== "image/png" && mediaType !== "video/webm") {
+    headers.set("Content-Security-Policy", "default-src 'none'; sandbox");
+  }
   if (input.range) {
     headers.set("Content-Range", `bytes ${input.range.start}-${input.range.end}/${input.size}`);
   }

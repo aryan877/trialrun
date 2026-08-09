@@ -184,6 +184,17 @@ describe("artifact storage boundaries", () => {
     );
     expect(headers.get("cache-control")).toContain("no-store");
     expect(headers.get("x-content-type-options")).toBe("nosniff");
+    expect(headers.get("content-security-policy")).toBeNull();
+
+    const video = artifactResponseHeaders({
+      fileName: "browser-review.webm",
+      mediaType: "video/webm",
+      sha256: digest,
+      size: 10,
+      range: undefined,
+    });
+    expect(video.get("content-type")).toBe("video/webm");
+    expect(video.get("content-security-policy")).toBeNull();
 
     const unsafeType = artifactResponseHeaders({
       fileName: "record.txt",
@@ -194,5 +205,6 @@ describe("artifact storage boundaries", () => {
     });
     expect(unsafeType.get("content-type")).toBe("application/octet-stream");
     expect(unsafeType.get("content-disposition")?.startsWith("attachment;")).toBe(true);
+    expect(unsafeType.get("content-security-policy")).toBe("default-src 'none'; sandbox");
   });
 });

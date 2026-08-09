@@ -245,6 +245,7 @@ function publicProofArtifactUrl(
 async function publicProofLinks(input: {
   readonly db: TrialRunDatabase;
   readonly reviewId: string;
+  readonly report: AgentTerminalReport;
 }): Promise<PublicProofLinks | null> {
   if (!runnerConfig.VAULT_KEY_BASE64) return null;
   const rows = await input.db
@@ -257,23 +258,55 @@ async function publicProofLinks(input: {
       ),
     )
     .orderBy(asc(artifacts.createdAt));
-  const baseScreenshot = rows.find(
-    ({ kind, side, metadata }) =>
-      kind === "screenshot" &&
-      side === "base" &&
-      typeof metadata["checkpointName"] === "string" &&
-      rows.some(
-        (candidate) =>
-          candidate.kind === "screenshot" &&
-          candidate.side === "head" &&
-          candidate.metadata["checkpointName"] === metadata["checkpointName"],
-      ),
-  );
-  const checkpointName = baseScreenshot?.metadata["checkpointName"];
-  const headScreenshot = rows.find(
-    ({ kind, side, metadata }) =>
-      kind === "screenshot" && side === "head" && metadata["checkpointName"] === checkpointName,
-  );
+  const citedPairs = (evidenceIds: readonly string[]) => {
+    const cited = new Set(evidenceIds);
+    return rows.flatMap((baseScreenshot) => {
+      const checkpointName = baseScreenshot.metadata["checkpointName"];
+      const baseArtifactId = baseScreenshot.metadata["artifactId"];
+      if (
+        baseScreenshot.kind !== "screenshot" ||
+        baseScreenshot.side !== "base" ||
+        typeof checkpointName !== "string" ||
+        typeof baseArtifactId !== "string" ||
+        !cited.has(baseArtifactId)
+      ) {
+        return [];
+      }
+      const headScreenshot = rows.find(({ kind, side, metadata }) => {
+        const headArtifactId = metadata["artifactId"];
+        return (
+          kind === "screenshot" &&
+          side === "head" &&
+          metadata["checkpointName"] === checkpointName &&
+          typeof headArtifactId === "string" &&
+          cited.has(headArtifactId)
+        );
+      });
+      return headScreenshot ? [{ baseScreenshot, headScreenshot }] : [];
+    });
+  };
+  const evidenceGroups = [
+    ...input.report.codeRiskFindings.flatMap(({ verification }) =>
+      verification.state === "reproduced" ? [verification.evidenceIds] : [],
+    ),
+    input.report.evidenceIds,
+  ];
+  let citedPair:
+    | {
+        readonly baseScreenshot: (typeof rows)[number];
+        readonly headScreenshot: (typeof rows)[number];
+      }
+    | undefined;
+  for (const evidenceIds of evidenceGroups) {
+    const pairs = citedPairs(evidenceIds);
+    if (pairs.length > 1) return null;
+    if (pairs[0]) {
+      citedPair = pairs[0];
+      break;
+    }
+  }
+  const baseScreenshot = citedPair?.baseScreenshot;
+  const headScreenshot = citedPair?.headScreenshot;
   const baseRecording = rows.find(
     ({ kind, side }) => kind === "browser_recording" && side === "base",
   );
@@ -1116,9 +1149,17 @@ export async function runReview(
     const github = githubService();
     const ownerDetailsUrl = new URL(`/app/reviews/${review.id}`, runnerConfig.APP_URL).href;
     let proofLinks: PublicProofLinks | undefined;
-    if (!firstFailure && !cancellationObserved && finalVerdict !== "inconclusive" && liveEvidence) {
+    if (
+      !firstFailure &&
+      !cancellationObserved &&
+      finalVerdict !== "inconclusive" &&
+      liveEvidence &&
+      agentRun
+    ) {
       try {
-        proofLinks = (await publicProofLinks({ db, reviewId: review.id })) ?? undefined;
+        proofLinks =
+          (await publicProofLinks({ db, reviewId: review.id, report: agentRun.report })) ??
+          undefined;
         if (!proofLinks) {
           await safeEvent(
             "proof.inline_unavailable",
