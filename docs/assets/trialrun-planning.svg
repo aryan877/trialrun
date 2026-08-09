@@ -99,7 +99,7 @@
   </g>
   <use href="#trialrun-mark" x="649" y="183" width="38" height="38" />
   <text x="699" y="208" font-size="16" font-weight="730" fill="#111111">TrialRun</text>
-  <text x="649" y="253" font-size="18" font-weight="750" fill="#111111">Ready for Zerops</text>
+  <text x="709" y="253" text-anchor="middle" font-size="14" font-weight="750" fill="#111111">Ready for Zerops</text>
   <rect x="649" y="274" width="120" height="38" rx="9" fill="#ffffff" />
   <circle cx="667" cy="293" r="8" fill="#b9ff56" />
   <path d="m663 293 3 3 6-7" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -150,5 +150,5 @@
   <text x="999" y="434" text-anchor="middle" font-size="11" font-weight="650" fill="#b9ff56">private network</text>
 
   <rect x="42" y="510" width="1118" height="34" rx="10" fill="#111111" />
-  <text x="601" y="532" text-anchor="middle" font-size="14" font-weight="660" fill="#fbfbf8">No customer Zerops file. TrialRun sends the safe plan; Zerops builds, networks and health-checks the lab.</text>
+  <text x="601" y="532" text-anchor="middle" font-size="14" font-weight="660" fill="#fbfbf8">No Zerops file to write. TrialRun sends the plan. Zerops builds, connects, health-checks and runs the lab.</text>
 </svg>

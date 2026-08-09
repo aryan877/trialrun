@@ -49,7 +49,7 @@ Chrome is one testing tool, not the boundary. Codex can compare live HTTP status
 
 For a Zerops review, TrialRun reads each app's recent output with `zcli service log` using that review's exact project and service IDs. It fetches base and PR separately, keeps at most 500 recent records, removes supplied test secrets, and gives Codex a bounded tail. Locally, the same tool reads the matching container logs. Codex gets useful app output without receiving Zerops credentials or arbitrary shell access.
 
-## No customer Zerops file
+## TrialRun creates the Zerops setup for every repository
 
 ![Codex explores the full exact commit, returns a cited typed run plan, TrialRun checks and compiles it, and Zerops runs isolated base and pull request systems](docs/assets/trialrun-planning.svg)
 
