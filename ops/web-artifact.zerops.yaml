@@ -26,7 +26,7 @@ zerops:
         TRIALRUN_PROOF_HEAD_SHA: fb978355bcb8037b8c16549be3ebcad7ed7d57f2
         TRIALRUN_PROOF_HEAD_WEBM_URL: https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE/artifacts/e3541c1b-653a-4724-b667-fb913bb3675a
         TRIALRUN_PROOF_REVIEW_URL: https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE
-        TRIALRUN_PROOF_SUMMARY: "Codex reproduced the cart regression: the pull request changed the wrong product while the base changed the selected item."
+        TRIALRUN_PROOF_SUMMARY: "Codex reproduced the UI bug, then matched the live API responses to isolate it to the pull request's browser handler."
         TRIALRUN_PROOF_TEARDOWN_SUMMARY: "Zerops deleted project bm8bQgyTQrC23Kqm5spgnA, then the exact project lookup returned projectNotFound."
         VAULT_KEY_VERSION: "1"
       start: node apps/web/server.js

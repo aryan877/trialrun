@@ -728,7 +728,7 @@ export default async function ReviewDetail({
 
         <section className="space-y-4" aria-labelledby="browser-recordings">
           <SectionHeading
-            description="Watch Codex drive the pull request and its baseline. Playback starts at 2×; the original, hash-checked WebM remains available."
+            description="TrialRun recorded these automatically inside the temporary Zerops project while Codex drove both live apps. Playback starts at 2×; each original, hash-checked WebM remains available."
             id="browser-recordings"
             title="Watch the review happen"
           />

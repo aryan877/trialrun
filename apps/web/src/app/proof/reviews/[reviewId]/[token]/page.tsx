@@ -173,7 +173,7 @@ export default async function PublicReviewProofPage({
         <section className="mt-12 overflow-hidden rounded-xl border border-black/12 bg-[#111114] text-white shadow-[0_26px_80px_rgba(0,0,0,0.18)]">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
             <h2 className="text-sm font-semibold">Real Chrome recordings</h2>
-            <p className="text-xs text-white/46">Native WebM · stored once · SHA-256 checked</p>
+            <p className="text-xs text-white/46">Auto-recorded on Zerops · SHA-256 checked</p>
           </div>
           <div className="grid divide-y divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
             {[
@@ -199,6 +199,10 @@ export default async function PublicReviewProofPage({
               </figure>
             ))}
           </div>
+          <p className="border-t border-white/10 px-4 py-3 text-xs leading-5 text-white/54 sm:px-5">
+            TrialRun&apos;s Chrome executor captured both videos inside this review&apos;s temporary
+            Zerops project while Codex tested the apps. Nothing was recorded or uploaded manually.
+          </p>
         </section>
 
         <section className="mt-10">

@@ -25,8 +25,8 @@ const reviewRoles = [
   },
   {
     image: "/brand/chrome.svg",
-    name: "Codex tests both systems live",
-    copy: "It drives real Chrome, calls app APIs, reads logs, and changes course as it learns.",
+    name: "Codex tests UI, APIs, and logs",
+    copy: "It drives both apps live and follows the evidence back into the code.",
   },
 ] as const;
 
@@ -50,8 +50,8 @@ export default async function Home() {
                 Know what the PR breaks.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-7 text-black/62 sm:text-xl sm:leading-8">
-                One Codex thread reads the repository and PR, then tests the code, UI, and API
-                against isolated base and changed apps on Zerops. TrialRun records the proof,
+                One Codex thread reads the repository and PR, then tests the code, UI, APIs, and
+                logs against isolated base and changed apps on Zerops. TrialRun records the proof,
                 publishes Codex&apos;s verdict, and proves the review project was deleted.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">

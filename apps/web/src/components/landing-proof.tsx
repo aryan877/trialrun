@@ -70,6 +70,11 @@ export function LandingProof({ proof }: { readonly proof: PublicProof }) {
           <RecordingFrame label="Pull request" sha={proof.headSha} videoUrl={proof.headWebmUrl} />
         </div>
 
+        <p className="mt-3 text-xs leading-5 text-white/56">
+          Recorded automatically inside this review&apos;s temporary Zerops project while Codex
+          drove both apps. No manual upload.
+        </p>
+
         <dl className="mt-4 grid gap-3 border-t border-white/12 pt-4 text-xs leading-5 text-white/54 sm:grid-cols-[0.8fr_1fr_1.2fr]">
           <div>
             <dt className="font-semibold text-white/82">Code</dt>
@@ -79,7 +84,7 @@ export function LandingProof({ proof }: { readonly proof: PublicProof }) {
           </div>
           <div>
             <dt className="font-semibold text-white/82">Evidence</dt>
-            <dd className="mt-0.5">The same Chrome path, recorded on both apps.</dd>
+            <dd className="mt-0.5">Chrome, live APIs, and logs in one Codex investigation.</dd>
           </div>
           <div>
             <dt className="font-semibold text-white/82">Teardown</dt>

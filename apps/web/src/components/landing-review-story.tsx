@@ -33,7 +33,7 @@ const safetyChecks = [
 const liveTools = [
   { icon: BracketsCurly, label: "Read code" },
   { icon: Browser, label: "Drive Chrome" },
-  { icon: Pulse, label: "Call HTTP" },
+  { icon: Pulse, label: "Test APIs" },
   { icon: TerminalWindow, label: "Read logs" },
 ] as const;
 
@@ -212,7 +212,7 @@ export function RepositoryToLabStory() {
               <div className="flex items-center gap-3 rounded-xl bg-[#111111] p-4 text-white">
                 <Image alt="" aria-hidden="true" height={24} src="/brand/chrome.svg" width={24} />
                 <div>
-                  <p className="text-sm font-semibold">Chrome + HTTP executor</p>
+                  <p className="text-sm font-semibold">Chrome + API executor</p>
                   <p className="mt-0.5 text-xs text-white/48">Inside the same private network</p>
                 </div>
               </div>
@@ -365,7 +365,7 @@ const deliverySteps = [
   {
     icon: VideoCamera,
     title: "Save the evidence",
-    copy: "Recordings, screenshots, API facts, and logs are copied out with hashes.",
+    copy: "The Zerops lab automatically records Chrome, screenshots, API facts, and logs with hashes.",
   },
   {
     icon: BracketsCurly,

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 560" role="img" aria-labelledby="planning-title planning-description" preserveAspectRatio="xMidYMid meet" font-family="Instrument Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-  <title id="planning-title">From pull request to a private Zerops test lab</title>
-  <desc id="planning-description">GitHub supplies one exact pull request. Codex explores the repository and decides what must run and what should be tested. TrialRun checks that plan against hard safety limits. Zerops then boots separate base and pull request applications, separate data, and one Chrome and API executor.</desc>
+  <title id="planning-title">The repository becomes a Zerops test lab automatically</title>
+  <desc id="planning-description">Codex reads the exact commit and works out the application, its data, and the test target. TrialRun checks the answer against hard limits. Zerops then builds the real base and pull request applications, gives each separate data, connects them over a private network, and health-checks the lab before testing begins.</desc>
   <defs>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
       <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#111111" flood-opacity="0.09" />
@@ -42,8 +42,8 @@
   </defs>
 
   <rect width="1200" height="560" fill="#fbfbf8" />
-  <text x="42" y="51" font-size="33" font-weight="760" fill="#111111">From pull request to live test lab.</text>
-  <text x="42" y="80" font-size="16" fill="#5f5f59">Codex figures out the stack. TrialRun keeps it safe. Zerops runs it for real.</text>
+  <text x="42" y="51" font-size="33" font-weight="760" fill="#111111">The repo becomes a Zerops test lab automatically.</text>
+  <text x="42" y="80" font-size="16" fill="#5f5f59">Codex works out what the app needs. TrialRun checks it. Zerops builds and runs it.</text>
 
   <!-- Exact repository -->
   <g filter="url(#shadow)">
@@ -87,8 +87,8 @@
   <text x="382" y="337" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">build</text>
   <rect x="490" y="319" width="68" height="27" rx="13.5" fill="#ffffff" />
   <text x="524" y="337" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">tests</text>
-  <text x="453" y="397" text-anchor="middle" font-size="22" font-weight="740" fill="#111111">Codex maps the repo</text>
-  <text x="453" y="426" text-anchor="middle" font-size="15" fill="#5f5f59">what runs · what to test</text>
+  <text x="453" y="397" text-anchor="middle" font-size="22" font-weight="740" fill="#111111">Codex learns the app</text>
+  <text x="453" y="426" text-anchor="middle" font-size="15" fill="#5f5f59">runtime · data · best test</text>
   <rect x="378" y="447" width="150" height="8" rx="4" fill="#ff3ca6" />
 
   <!-- TrialRun safety gate -->
@@ -99,11 +99,11 @@
   </g>
   <use href="#trialrun-mark" x="649" y="183" width="38" height="38" />
   <text x="699" y="208" font-size="16" font-weight="730" fill="#111111">TrialRun</text>
-  <text x="649" y="253" font-size="21" font-weight="750" fill="#111111">Safe to boot</text>
+  <text x="649" y="253" font-size="18" font-weight="750" fill="#111111">Ready for Zerops</text>
   <rect x="649" y="274" width="120" height="38" rx="9" fill="#ffffff" />
   <circle cx="667" cy="293" r="8" fill="#b9ff56" />
   <path d="m663 293 3 3 6-7" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-  <text x="682" y="298" font-size="13" font-weight="650" fill="#111111">Node + Postgres</text>
+  <text x="682" y="298" font-size="13" font-weight="650" fill="#111111">App + data</text>
   <rect x="649" y="321" width="120" height="38" rx="9" fill="#ffffff" />
   <circle cx="667" cy="340" r="8" fill="#b9ff56" />
   <path d="m663 340 3 3 6-7" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -120,7 +120,7 @@
     <rect x="840" y="112" width="320" height="376" rx="26" fill="#f2fffc" stroke="#02b3a4" stroke-width="2.5" />
   </g>
   <use href="#zerops-mark" x="865" y="136" width="26" height="31" />
-  <text x="904" y="160" font-size="17" font-weight="740" fill="#02a99b">Zerops live lab</text>
+  <text x="904" y="160" font-size="17" font-weight="740" fill="#02a99b">Zerops builds the live lab</text>
   <circle cx="1129" cy="151" r="6" fill="#31c768" />
   <text x="1113" y="179" text-anchor="end" font-size="11" font-weight="700" fill="#25874a">READY</text>
 
@@ -131,24 +131,24 @@
   <rect x="1022" y="211" width="30" height="20" rx="10" fill="#ff4fa3" />
   <text x="1037" y="225" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">PR</text>
   <rect x="878" y="246" width="98" height="22" rx="6" fill="#eef2ff" />
-  <text x="927" y="261" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">live app</text>
+  <text x="927" y="261" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">old app</text>
   <rect x="878" y="276" width="98" height="22" rx="6" fill="#f4f4f0" />
-  <text x="927" y="291" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">private data</text>
+  <text x="927" y="291" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">own data</text>
   <rect x="1022" y="246" width="98" height="22" rx="6" fill="#fff0f8" />
-  <text x="1071" y="261" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">live app</text>
+  <text x="1071" y="261" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">changed app</text>
   <rect x="1022" y="276" width="98" height="22" rx="6" fill="#f4f4f0" />
-  <text x="1071" y="291" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">private data</text>
+  <text x="1071" y="291" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">own data</text>
 
   <path d="M927 312V339H999" fill="none" stroke="#5f5f59" stroke-width="1.5" />
   <path d="M1071 312V339H999" fill="none" stroke="#5f5f59" stroke-width="1.5" />
   <rect x="864" y="339" width="270" height="105" rx="14" fill="#111111" />
   <use href="#chrome-mark" x="880" y="355" width="28" height="28" />
-  <text x="919" y="368" font-size="15" font-weight="720" fill="#ffffff">Chrome + HTTP</text>
-  <text x="919" y="391" font-size="13" fill="#c9c9c2">same Codex · both commits</text>
+  <text x="919" y="368" font-size="15" font-weight="720" fill="#ffffff">Chrome + API tester</text>
+  <text x="919" y="391" font-size="13" fill="#c9c9c2">same Codex · both live apps</text>
   <rect x="882" y="411" width="234" height="5" rx="2.5" fill="#333333" />
   <rect x="882" y="411" width="158" height="5" rx="2.5" fill="#5dd8ff" />
   <text x="999" y="434" text-anchor="middle" font-size="11" font-weight="650" fill="#b9ff56">private network</text>
 
   <rect x="42" y="510" width="1118" height="34" rx="10" fill="#111111" />
-  <text x="601" y="532" text-anchor="middle" font-size="14" font-weight="660" fill="#fbfbf8">The developer approves: “web app + Postgres + UI/API test.” TrialRun handles the Zerops setup.</text>
+  <text x="601" y="532" text-anchor="middle" font-size="14" font-weight="660" fill="#fbfbf8">No customer Zerops file. TrialRun sends the safe plan; Zerops builds, networks and health-checks the lab.</text>
 </svg>

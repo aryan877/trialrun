@@ -203,6 +203,8 @@ export function pullRequestEvidenceComment(input: {
         "| --- | --- |",
         `| ![Base evidence](${input.evidence.baseScreenshotUrl}) | ![Pull request evidence](${input.evidence.headScreenshotUrl}) |`,
         "",
+        "TrialRun recorded these automatically inside the temporary Zerops project while Codex drove both live apps. No manual video upload.",
+        "",
         `[Watch base recording](${input.evidence.baseRecordingUrl}) · [Watch pull request recording](${input.evidence.headRecordingUrl})`,
       ]
     : [];

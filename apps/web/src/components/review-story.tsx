@@ -143,7 +143,7 @@ export function ReviewStory({
       </ol>
       <div className="flex items-center justify-center gap-2 border-t border-white/10 px-5 py-3 text-xs text-white/42">
         <ArrowDown aria-hidden="true" className="size-3.5" />
-        The recordings below show the same investigation
+        TrialRun recorded the investigation automatically inside its temporary Zerops project
       </div>
     </section>
   );

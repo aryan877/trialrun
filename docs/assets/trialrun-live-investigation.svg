@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 520" role="img" aria-labelledby="title description" preserveAspectRatio="xMidYMid meet" font-family="Instrument Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title id="title">One Codex thread investigates code, UI, APIs, and Zerops service logs</title>
+  <desc id="description">A TrialRun review uses either managed Codex or a customer's Codex in a private Zerops ZCP workspace. The selected Codex reads the exact repository, drives Chrome, calls the running applications' APIs, and reads bounded secret-redacted Zerops service logs. The base and pull request applications run with separate data inside one private disposable Zerops project. TrialRun records the cited code, screenshots, WebM recordings, API responses, and service logs as one proof trail.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#111111" flood-opacity="0.08" />
+    </filter>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0L9 4.5L0 9Z" fill="#111111" />
+    </marker>
+    <symbol id="trialrun" viewBox="0 0 32 32">
+      <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="#fbfbf8" stroke="#111111" stroke-opacity=".13" />
+      <path d="M4 6h11v20H4z" fill="#111111" />
+      <path d="M17 6h11v20H17z" fill="#2357ff" />
+      <path d="M12.5 12h7v8h-7z" fill="#ff3ca6" />
+    </symbol>
+    <symbol id="zerops" viewBox="0 0 43 51">
+      <path d="M19.73.26 2.54 6.83A3.95 3.95 0 0 0 0 10.52V27.1l7.9-4.56v-9.3l13.24-5.06V0c-.48 0-.96.09-1.41.26Z" fill="#3dbeb3" />
+      <path d="m8.04 37.3 13.1-7.56v-9.12L.9 32.3a1.8 1.8 0 0 0-.9 1.56v6.11c0 1.63 1.02 3.11 2.54 3.69l17.19 6.57c.45.17.93.26 1.41.26v-8.18L8.04 37.3Z" fill="#3dbeb3" />
+      <path d="M41.44 18.03c.52-.3.84-.85.84-1.45v-6.06c0-1.63-1.02-3.11-2.54-3.69L22.55.26c-.45-.17-.93-.26-1.41-.26v8.18l12.97 4.96-12.97 7.49v9.12l20.3-11.71Z" fill="#02b3a4" />
+      <path d="m22.55 50.23 17.19-6.57c1.52-.58 2.54-2.06 2.54-3.69v-16.7l-7.9 4.56v9.43l-13.24 5.06v8.18c.48 0 .96-.09 1.41-.26Z" fill="#02b3a4" />
+    </symbol>
+    <symbol id="codex" viewBox="0 0 716 716">
+      <path d="M508.749 317.399c8.028-30.085.242-63.515-23.36-87.117-23.601-23.601-57.029-31.387-87.116-23.359-22.042-21.995-54.883-31.967-87.125-23.327-32.242 8.638-55.698 33.696-63.788 63.765-30.069 8.09-55.127 31.549-63.765 63.788-8.638 32.242 1.332 65.083 23.329 87.125-8.028 30.085-.241 63.515 23.36 87.117 23.601 23.601 57.029 31.388 87.117 23.359 22.041 21.995 54.885 31.967 87.124 23.329 32.242-8.638 55.698-33.695 63.788-63.764 30.07-8.091 55.127-31.549 63.765-63.789 8.638-32.241-1.331-65.083-23.329-87.124v-.003Zm-37.85-72.623c15.993 15.994 22.589 37.825 19.788 58.636l-75.11-43.366a10.23 10.23 0 0 0-10.232 0l-87.944 50.774v-33.294a6.57 6.57 0 0 1 3.275-5.689l66.968-38.663c26.534-14.821 60.702-10.951 83.257 11.602h-.002Zm-113.062 66.368 40.438 23.347v46.694l-40.438 23.347-40.439-23.347v-46.694l40.439-23.347Zm-93.061-41.451c.431-30.388 20.868-58.044 51.677-66.3 21.847-5.853 44.052-.649 60.674 12.18l-75.113 43.364a10.23 10.23 0 0 0-5.116 8.861v101.548l-28.833-16.647a6.58 6.58 0 0 1-3.289-5.682v-77.326.002Zm-61.385 46.761c5.853-21.846 21.463-38.476 40.885-46.455v86.731a10.23 10.23 0 0 0 5.116 8.861l87.945 50.774-28.834 16.648a6.58 6.58 0 0 1-6.564.007l-66.968-38.663c-26.103-15.568-39.833-47.096-31.58-77.903Zm41.384 154.446c-15.994-15.994-22.589-35.825-19.789-58.636l75.11 43.366a10.23 10.23 0 0 0 10.232 0l87.945-50.774v33.293a6.57 6.57 0 0 1-3.276 5.69l-66.968 38.663c-26.534 14.82-60.702 10.95-83.257-11.602h.003Zm206.122-24.918c-.431 30.389-20.868 58.045-51.677 66.301-21.847 5.853-44.052.649-60.673-12.181l75.112-43.364a10.23 10.23 0 0 0 5.116-8.861V346.329l28.834 16.648a6.58 6.58 0 0 1 3.288 5.682v77.326-.003Zm61.385-46.761c-5.853 21.847-21.463 38.476-40.885 45.455v-86.73a10.23 10.23 0 0 0-5.116-8.861l-87.945-50.774 28.834-16.648a6.58 6.58 0 0 1 6.564-.008l66.968 38.663c26.103 15.569 39.834 47.097 31.58 77.903Z" fill="#111111" />
+    </symbol>
+    <symbol id="chrome" viewBox="0 0 63 63">
+      <linearGradient id="cg" gradientUnits="userSpaceOnUse" x1="34.909" x2="7.632" y1="61.029" y2="13.785"><stop offset="0" stop-color="#1e8e3e"/><stop offset="1" stop-color="#34a853"/></linearGradient>
+      <linearGradient id="cy" gradientUnits="userSpaceOnUse" x1="26.904" x2="54.181" y1="63.079" y2="15.835"><stop offset="0" stop-color="#fcc934"/><stop offset="1" stop-color="#fbbc04"/></linearGradient>
+      <linearGradient id="cr" gradientUnits="userSpaceOnUse" x1="4.221" x2="58.775" y1="19.688" y2="19.688"><stop offset="0" stop-color="#d93025"/><stop offset="1" stop-color="#ea4335"/></linearGradient>
+      <path d="M31.499 47.247c8.699 0 15.75-7.052 15.75-15.75s-7.051-15.75-15.75-15.75-15.75 7.051-15.75 15.75 7.052 15.75 15.75 15.75Z" fill="#fff"/>
+      <path d="M17.859 39.375 4.221 15.754A31.5 31.5 0 0 0 31.501 62.996l13.638-23.621v-.004a15.75 15.75 0 0 1-27.28.004Z" fill="url(#cg)"/>
+      <path d="M45.138 39.374 31.5 62.995a31.5 31.5 0 0 0 27.273-47.226H31.498l-.003.002a15.75 15.75 0 0 1 13.643 23.603Z" fill="url(#cy)"/>
+      <path d="M31.499 43.969c6.886 0 12.469-5.583 12.469-12.469s-5.583-12.469-12.469-12.469S19.03 24.614 19.03 31.5s5.583 12.469 12.469 12.469Z" fill="#1a73e8"/>
+      <path d="M31.499 15.75h27.275A31.5 31.5 0 0 0 4.221 15.754l13.638 23.621.003.002A15.75 15.75 0 0 1 31.499 15.75Z" fill="url(#cr)"/>
+    </symbol>
+  </defs>
+
+  <rect width="1200" height="520" fill="#fbfbf8" />
+  <text x="40" y="50" font-size="32" font-weight="760" fill="#111111">One Codex thread. Four live sources of truth.</text>
+  <text x="40" y="80" font-size="16" fill="#5f5f59">It moves between code, Chrome, APIs and Zerops service logs until the evidence agrees.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="40" y="120" width="230" height="300" rx="22" fill="#ffffff" stroke="#d8d8d2" stroke-width="2" />
+  </g>
+  <text x="62" y="153" font-size="16" font-weight="730" fill="#111111">Choose where Codex lives</text>
+  <rect x="62" y="176" width="186" height="88" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="1.5" />
+  <use href="#trialrun" x="78" y="194" width="32" height="32" />
+  <text x="122" y="207" font-size="14" font-weight="720" fill="#111111">Managed runner</text>
+  <text x="122" y="229" font-size="12" fill="#5f5f59">default · ready to run</text>
+  <rect x="62" y="278" width="186" height="104" rx="14" fill="#fff0f8" stroke="#ff3ca6" stroke-width="1.5" />
+  <use href="#zerops" x="78" y="295" width="28" height="34" />
+  <text x="120" y="307" font-size="14" font-weight="720" fill="#111111">Customer ZCP</text>
+  <text x="120" y="328" font-size="12" fill="#5f5f59">optional private workspace</text>
+  <text x="78" y="359" font-size="12" fill="#8c155a">their Codex subscription</text>
+  <text x="155" y="402" text-anchor="middle" font-size="12" font-weight="650" fill="#5f5f59">one connection pinned to the job</text>
+
+  <path d="M270 270H302" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="305" y="120" width="440" height="300" rx="24" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
+  </g>
+  <use href="#codex" x="329" y="142" width="38" height="38" />
+  <text x="381" y="161" font-size="17" font-weight="740" fill="#8c155a">The same Codex keeps the context</text>
+  <text x="381" y="182" font-size="13" fill="#5f5f59">observe → act → verify → change course</text>
+
+  <rect x="329" y="210" width="184" height="78" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
+  <text x="347" y="239" font-size="15" font-weight="720" fill="#111111">{ } Read exact code</text>
+  <text x="347" y="263" font-size="12" fill="#5f5f59">diff · callers · tests</text>
+
+  <rect x="537" y="210" width="184" height="78" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
+  <use href="#chrome" x="554" y="226" width="30" height="30" />
+  <text x="595" y="239" font-size="15" font-weight="720" fill="#111111">Drive Chrome</text>
+  <text x="595" y="263" font-size="12" fill="#5f5f59">DOM · clicks · video</text>
+
+  <rect x="329" y="306" width="184" height="78" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
+  <text x="347" y="335" font-size="15" font-weight="720" fill="#111111">↔ Test live APIs</text>
+  <text x="347" y="359" font-size="12" fill="#5f5f59">status · headers · body</text>
+
+  <rect x="537" y="306" width="184" height="78" rx="13" fill="#111111" />
+  <use href="#zerops" x="554" y="324" width="24" height="29" />
+  <text x="591" y="335" font-size="14" font-weight="720" fill="#ffffff">Read Zerops logs</text>
+  <text x="591" y="359" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#c7ff63">zcli service log</text>
+
+  <path d="M745 270H777" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="780" y="120" width="380" height="300" rx="24" fill="#eafcf8" stroke="#02b3a4" stroke-width="2" />
+  </g>
+  <use href="#zerops" x="804" y="142" width="27" height="32" />
+  <text x="845" y="160" font-size="17" font-weight="740" fill="#087b72">One disposable Zerops lab</text>
+  <text x="845" y="181" font-size="13" fill="#5f5f59">private network · readiness checked</text>
+
+  <rect x="804" y="208" width="156" height="112" rx="14" fill="#ffffff" stroke="#111111" stroke-opacity=".14" />
+  <rect x="820" y="224" width="48" height="21" rx="10.5" fill="#111111" />
+  <text x="844" y="239" text-anchor="middle" font-size="10" font-weight="720" fill="#ffffff">BASE</text>
+  <text x="820" y="275" font-size="15" font-weight="720" fill="#111111">App + data</text>
+  <text x="820" y="298" font-size="12" fill="#5f5f59">exact base SHA</text>
+
+  <rect x="980" y="208" width="156" height="112" rx="14" fill="#ffffff" stroke="#ff3ca6" stroke-width="1.5" />
+  <rect x="996" y="224" width="38" height="21" rx="10.5" fill="#ff3ca6" />
+  <text x="1015" y="239" text-anchor="middle" font-size="10" font-weight="720" fill="#ffffff">PR</text>
+  <text x="996" y="275" font-size="15" font-weight="720" fill="#111111">App + data</text>
+  <text x="996" y="298" font-size="12" fill="#5f5f59">exact head SHA</text>
+
+  <rect x="804" y="340" width="332" height="48" rx="12" fill="#111111" />
+  <text x="824" y="361" font-size="13" font-weight="700" fill="#ffffff">Live output from both sides</text>
+  <text x="824" y="379" font-size="11" fill="#c9c9c2">HTTP responses · browser events · service logs</text>
+  <text x="970" y="406" text-anchor="middle" font-size="12" font-weight="650" fill="#087b72">same question against old and new</text>
+
+  <rect x="40" y="452" width="1120" height="44" rx="12" fill="#111111" />
+  <text x="600" y="480" text-anchor="middle" font-size="14" font-weight="680" fill="#fbfbf8">One proof trail: cited code · UI frames + WebM · API responses · secret-redacted Zerops logs</text>
+</svg>
