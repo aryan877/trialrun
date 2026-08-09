@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 520" role="img" aria-labelledby="title description" preserveAspectRatio="xMidYMid meet" font-family="Instrument Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 440" role="img" aria-labelledby="title description" preserveAspectRatio="xMidYMid meet" font-family="Instrument Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
   <title id="title">One Codex thread investigates code, UI, APIs, and Zerops service logs</title>
-  <desc id="description">A TrialRun review uses either managed Codex or a customer's Codex in a private Zerops ZCP workspace. The selected Codex reads the exact repository, drives Chrome, calls the running applications' APIs, and reads bounded secret-redacted Zerops service logs. The base and pull request applications run with separate data inside one private disposable Zerops project. TrialRun records the cited code, screenshots, WebM recordings, API responses, and service logs as one proof trail.</desc>
+  <desc id="description">One Codex thread can run through TrialRun or a customer's private Zerops ZCP workspace. It reads the code and investigates the current and proposed applications through Chrome, HTTP, and Zerops service logs. Both applications and their separate data run inside one private disposable Zerops project.</desc>
   <defs>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
       <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#111111" flood-opacity="0.08" />
@@ -35,78 +35,74 @@
     </symbol>
   </defs>
 
-  <rect width="1200" height="520" fill="#fbfbf8" />
-  <text x="40" y="50" font-size="32" font-weight="760" fill="#111111">One Codex thread. Four live sources of truth.</text>
-  <text x="40" y="80" font-size="16" fill="#5f5f59">It moves between code, Chrome, APIs and Zerops service logs until the evidence agrees.</text>
+  <rect width="1200" height="440" fill="#fbfbf8" />
+  <text x="40" y="50" font-size="32" font-weight="760" fill="#111111">One Codex thread investigates the whole change.</text>
+  <text x="40" y="80" font-size="16" fill="#5f5f59">It moves between the code and the live Zerops lab until it can explain what changed.</text>
 
   <g filter="url(#shadow)">
-    <rect x="40" y="120" width="230" height="300" rx="22" fill="#ffffff" stroke="#d8d8d2" stroke-width="2" />
+    <rect x="40" y="116" width="220" height="276" rx="22" fill="#ffffff" stroke="#d8d8d2" stroke-width="2" />
   </g>
-  <text x="62" y="153" font-size="16" font-weight="730" fill="#111111">Choose where Codex lives</text>
-  <rect x="62" y="176" width="186" height="88" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="1.5" />
-  <use href="#trialrun" x="78" y="194" width="32" height="32" />
-  <text x="122" y="207" font-size="14" font-weight="720" fill="#111111">Managed runner</text>
-  <text x="122" y="229" font-size="12" fill="#5f5f59">default · ready to run</text>
-  <rect x="62" y="278" width="186" height="104" rx="14" fill="#fff0f8" stroke="#ff3ca6" stroke-width="1.5" />
-  <use href="#zerops" x="78" y="295" width="28" height="34" />
-  <text x="120" y="307" font-size="14" font-weight="720" fill="#111111">Customer ZCP</text>
-  <text x="120" y="328" font-size="12" fill="#5f5f59">optional private workspace</text>
-  <text x="78" y="359" font-size="12" fill="#8c155a">their Codex subscription</text>
-  <text x="155" y="402" text-anchor="middle" font-size="12" font-weight="650" fill="#5f5f59">one connection pinned to the job</text>
+  <text x="62" y="150" font-size="16" font-weight="730" fill="#111111">Where Codex runs</text>
+  <rect x="62" y="170" width="176" height="76" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="1.5" />
+  <use href="#trialrun" x="78" y="190" width="30" height="30" />
+  <text x="120" y="201" font-size="14" font-weight="720" fill="#111111">Managed Codex</text>
+  <text x="120" y="222" font-size="12" fill="#5f5f59">ready by default</text>
+  <rect x="62" y="260" width="176" height="88" rx="14" fill="#fff0f8" stroke="#ff3ca6" stroke-width="1.5" />
+  <use href="#zerops" x="78" y="279" width="27" height="32" />
+  <text x="118" y="291" font-size="14" font-weight="720" fill="#111111">Your Codex</text>
+  <text x="78" y="325" font-size="12" fill="#8c155a">private ZCP workspace</text>
+  <text x="150" y="374" text-anchor="middle" font-size="12" font-weight="650" fill="#5f5f59">one choice per review</text>
 
-  <path d="M270 270H302" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M260 254H292" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow)" />
 
   <g filter="url(#shadow)">
-    <rect x="305" y="120" width="440" height="300" rx="24" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
+    <rect x="295" y="116" width="410" height="276" rx="24" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
   </g>
-  <use href="#codex" x="329" y="142" width="38" height="38" />
-  <text x="381" y="161" font-size="17" font-weight="740" fill="#8c155a">The same Codex keeps the context</text>
-  <text x="381" y="182" font-size="13" fill="#5f5f59">observe → act → verify → change course</text>
+  <use href="#codex" x="319" y="138" width="36" height="36" />
+  <text x="368" y="158" font-size="17" font-weight="740" fill="#8c155a">Codex keeps the context</text>
+  <text x="368" y="179" font-size="13" fill="#5f5f59">one investigation, not four separate tests</text>
 
-  <rect x="329" y="210" width="184" height="78" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
-  <text x="347" y="239" font-size="15" font-weight="720" fill="#111111">{ } Read exact code</text>
-  <text x="347" y="263" font-size="12" fill="#5f5f59">diff · callers · tests</text>
+  <rect x="319" y="204" width="172" height="70" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
+  <text x="337" y="232" font-size="15" font-weight="720" fill="#111111">{ } Read the code</text>
+  <text x="337" y="255" font-size="12" fill="#5f5f59">diff · callers · tests</text>
 
-  <rect x="537" y="210" width="184" height="78" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
-  <use href="#chrome" x="554" y="226" width="30" height="30" />
-  <text x="595" y="239" font-size="15" font-weight="720" fill="#111111">Drive Chrome</text>
-  <text x="595" y="263" font-size="12" fill="#5f5f59">DOM · clicks · video</text>
+  <rect x="509" y="204" width="172" height="70" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
+  <use href="#chrome" x="526" y="221" width="28" height="28" />
+  <text x="565" y="232" font-size="15" font-weight="720" fill="#111111">Use the apps</text>
+  <text x="565" y="255" font-size="12" fill="#5f5f59">clicks · video</text>
 
-  <rect x="329" y="306" width="184" height="78" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
-  <text x="347" y="335" font-size="15" font-weight="720" fill="#111111">↔ Test live APIs</text>
-  <text x="347" y="359" font-size="12" fill="#5f5f59">status · headers · body</text>
+  <rect x="319" y="292" width="172" height="70" rx="13" fill="#ffffff" stroke="#111111" stroke-opacity=".12" />
+  <text x="337" y="320" font-size="15" font-weight="720" fill="#111111">↔ Call both APIs</text>
+  <text x="337" y="343" font-size="12" fill="#5f5f59">status · response</text>
 
-  <rect x="537" y="306" width="184" height="78" rx="13" fill="#111111" />
-  <use href="#zerops" x="554" y="324" width="24" height="29" />
-  <text x="591" y="335" font-size="14" font-weight="720" fill="#ffffff">Read Zerops logs</text>
-  <text x="591" y="359" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#c7ff63">zcli service log</text>
+  <rect x="509" y="292" width="172" height="70" rx="13" fill="#111111" />
+  <use href="#zerops" x="526" y="310" width="23" height="27" />
+  <text x="561" y="320" font-size="14" font-weight="720" fill="#ffffff">Service logs</text>
+  <text x="561" y="343" font-size="11" fill="#c7ff63">current + PR</text>
 
-  <path d="M745 270H777" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow)" />
+  <path d="M705 254H737" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow)" />
 
   <g filter="url(#shadow)">
-    <rect x="780" y="120" width="380" height="300" rx="24" fill="#eafcf8" stroke="#02b3a4" stroke-width="2" />
+    <rect x="740" y="116" width="420" height="276" rx="24" fill="#eafcf8" stroke="#02b3a4" stroke-width="2" />
   </g>
-  <use href="#zerops" x="804" y="142" width="27" height="32" />
-  <text x="845" y="160" font-size="17" font-weight="740" fill="#087b72">One disposable Zerops lab</text>
-  <text x="845" y="181" font-size="13" fill="#5f5f59">private network · readiness checked</text>
+  <use href="#zerops" x="764" y="138" width="27" height="32" />
+  <text x="805" y="158" font-size="17" font-weight="740" fill="#087b72">Private Zerops review lab</text>
+  <text x="805" y="179" font-size="13" fill="#5f5f59">built for this pull request, then deleted</text>
 
-  <rect x="804" y="208" width="156" height="112" rx="14" fill="#ffffff" stroke="#111111" stroke-opacity=".14" />
-  <rect x="820" y="224" width="48" height="21" rx="10.5" fill="#111111" />
-  <text x="844" y="239" text-anchor="middle" font-size="10" font-weight="720" fill="#ffffff">BASE</text>
-  <text x="820" y="275" font-size="15" font-weight="720" fill="#111111">App + data</text>
-  <text x="820" y="298" font-size="12" fill="#5f5f59">exact base SHA</text>
+  <rect x="764" y="204" width="176" height="100" rx="14" fill="#ffffff" stroke="#111111" stroke-opacity=".14" />
+  <rect x="780" y="220" width="66" height="21" rx="10.5" fill="#111111" />
+  <text x="813" y="235" text-anchor="middle" font-size="10" font-weight="720" fill="#ffffff">CURRENT</text>
+  <text x="780" y="267" font-size="15" font-weight="720" fill="#111111">Current app</text>
+  <text x="780" y="288" font-size="12" fill="#5f5f59">its own data</text>
 
-  <rect x="980" y="208" width="156" height="112" rx="14" fill="#ffffff" stroke="#ff3ca6" stroke-width="1.5" />
-  <rect x="996" y="224" width="38" height="21" rx="10.5" fill="#ff3ca6" />
-  <text x="1015" y="239" text-anchor="middle" font-size="10" font-weight="720" fill="#ffffff">PR</text>
-  <text x="996" y="275" font-size="15" font-weight="720" fill="#111111">App + data</text>
-  <text x="996" y="298" font-size="12" fill="#5f5f59">exact head SHA</text>
+  <rect x="960" y="204" width="176" height="100" rx="14" fill="#ffffff" stroke="#ff3ca6" stroke-width="1.5" />
+  <rect x="976" y="220" width="38" height="21" rx="10.5" fill="#ff3ca6" />
+  <text x="995" y="235" text-anchor="middle" font-size="10" font-weight="720" fill="#ffffff">PR</text>
+  <text x="976" y="267" font-size="15" font-weight="720" fill="#111111">Proposed app</text>
+  <text x="976" y="288" font-size="12" fill="#5f5f59">separate data</text>
 
-  <rect x="804" y="340" width="332" height="48" rx="12" fill="#111111" />
-  <text x="824" y="361" font-size="13" font-weight="700" fill="#ffffff">Live output from both sides</text>
-  <text x="824" y="379" font-size="11" fill="#c9c9c2">HTTP responses · browser events · service logs</text>
-  <text x="970" y="406" text-anchor="middle" font-size="12" font-weight="650" fill="#087b72">same question against old and new</text>
-
-  <rect x="40" y="452" width="1120" height="44" rx="12" fill="#111111" />
-  <text x="600" y="480" text-anchor="middle" font-size="14" font-weight="680" fill="#fbfbf8">One proof trail: cited code · UI frames + WebM · API responses · secret-redacted Zerops logs</text>
+  <rect x="764" y="324" width="372" height="44" rx="12" fill="#111111" />
+  <use href="#chrome" x="780" y="333" width="26" height="26" />
+  <text x="818" y="343" font-size="13" font-weight="700" fill="#ffffff">Chrome + HTTP executor</text>
+  <text x="818" y="360" font-size="11" fill="#c9c9c2">beside both apps · Zerops streams their logs</text>
 </svg>

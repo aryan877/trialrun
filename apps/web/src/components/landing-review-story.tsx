@@ -191,30 +191,30 @@ export function RepositoryToLabStory() {
           </article>
 
           <article className="bg-[#eafcf8] p-6 sm:p-8">
-            <BrandLabel mark="/brand/zerops.svg" name="Zerops runs it" step="Live result" />
+            <BrandLabel mark="/brand/zerops.svg" name="Zerops builds the lab" step="Live result" />
             <h3 className="mt-8 text-2xl font-semibold tracking-[-0.035em]">
               One private lab per PR
             </h3>
             <div className="mt-5 space-y-3">
               <div className="rounded-xl border border-[#02b3a4]/24 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold">Base app</span>
+                  <span className="text-sm font-semibold">Current app</span>
                   <span className="size-2 rounded-full bg-[#02b3a4]" />
                 </div>
-                <p className="mt-1 text-xs text-black/50">Exact base SHA · private data</p>
+                <p className="mt-1 text-xs text-black/50">Running today · its own data</p>
               </div>
               <div className="rounded-xl border border-[#ff3ca6]/28 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-sm font-semibold">Pull request app</span>
                   <span className="size-2 rounded-full bg-[#ff3ca6]" />
                 </div>
-                <p className="mt-1 text-xs text-black/50">Exact head SHA · separate data</p>
+                <p className="mt-1 text-xs text-black/50">Proposed change · separate data</p>
               </div>
               <div className="flex items-center gap-3 rounded-xl bg-[#111111] p-4 text-white">
                 <Image alt="" aria-hidden="true" height={24} src="/brand/chrome.svg" width={24} />
                 <div>
                   <p className="text-sm font-semibold">Chrome + API executor</p>
-                  <p className="mt-0.5 text-xs text-white/48">Inside the same private network</p>
+                  <p className="mt-0.5 text-xs text-white/48">One private Zerops network</p>
                 </div>
               </div>
             </div>
@@ -235,8 +235,8 @@ export function RepositoryToLabStory() {
   );
 }
 
-function LiveApp({ side }: { readonly side: "Base commit" | "Pull request" }) {
-  const isHead = side === "Pull request";
+function LiveApp({ side }: { readonly side: "Current app" | "Proposed app" }) {
+  const isHead = side === "Proposed app";
   return (
     <div className="relative">
       <div
@@ -291,7 +291,7 @@ export function LiveInvestigationStory() {
 
         <div className="mt-12 overflow-hidden rounded-[24px] border border-white/14 bg-[#19191c] shadow-[0_28px_90px_rgba(0,0,0,0.32)]">
           <div className="grid gap-7 p-5 sm:p-8 lg:grid-cols-[1fr_0.72fr_1fr] lg:items-center lg:gap-8 lg:p-10">
-            <LiveApp side="Base commit" />
+            <LiveApp side="Current app" />
 
             <div className="relative order-first lg:order-none">
               <div className="absolute top-1/2 -left-12 hidden w-12 border-t border-dashed border-white/24 lg:block" />
@@ -330,14 +330,14 @@ export function LiveInvestigationStory() {
               </div>
             </div>
 
-            <LiveApp side="Pull request" />
+            <LiveApp side="Proposed app" />
           </div>
 
           <div className="grid border-t border-white/10 sm:grid-cols-3">
             <div className="border-b border-white/10 p-5 sm:border-r sm:border-b-0 sm:p-6">
               <p className="text-sm font-semibold text-[#65dcff]">Same question</p>
               <p className="mt-2 text-sm leading-6 text-white/56">
-                Codex can repeat one interaction or HTTP call against both live commits.
+                Codex can repeat one interaction or HTTP call against the current and proposed apps.
               </p>
             </div>
             <div className="border-b border-white/10 p-5 sm:border-r sm:border-b-0 sm:p-6">
@@ -364,7 +364,7 @@ const deliverySteps = [
   {
     icon: VideoCamera,
     title: "Save the evidence",
-    copy: "The Zerops lab automatically records Chrome, screenshots, API facts, and logs with hashes.",
+    copy: "TrialRun records Chrome, screenshots, API facts, and logs inside the Zerops lab.",
   },
   {
     icon: BracketsCurly,

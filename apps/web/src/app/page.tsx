@@ -20,8 +20,8 @@ const reviewRoles = [
   },
   {
     image: "/brand/zerops.svg",
-    name: "Zerops boots the exact base and PR",
-    copy: "Both commits run as separate private apps with separate data.",
+    name: "Zerops boots both versions",
+    copy: "The current and proposed apps run privately with separate data.",
   },
   {
     image: "/brand/chrome.svg",
@@ -50,11 +50,10 @@ export default async function Home() {
                 Know what the PR breaks.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-7 text-black/62 sm:text-xl sm:leading-8">
-                Connect a GitHub repository. Codex explores the whole codebase and works out which
-                apps, data services, build commands, ports, and tests are needed. TrialRun checks
-                that plan, and Zerops builds the current app and pull-request version with separate
-                data. The same Codex thread tests their code, UI, APIs, and logs before TrialRun
-                posts the recorded proof.
+                Connect GitHub. Codex maps the repository and decides what must run. TrialRun turns
+                that into a checked Zerops setup. Zerops starts the current app and the proposed
+                change with separate data. The same Codex thread investigates both through code,
+                Chrome, HTTP, and logs, then posts the recorded proof.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link

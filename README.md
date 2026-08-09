@@ -2,10 +2,10 @@
   <img src="docs/assets/logos/trialrun.svg" width="72" height="72" alt="TrialRun" />
 </p>
 
-<h1 align="center">Codex tests the app you have and the app your pull request creates, live on Zerops.</h1>
+<h1 align="center">Codex runs your pull request against the live product—not just the diff.</h1>
 
 <p align="center">
-  Connect a repository. Codex works out what must run and what should be tested. TrialRun generates the Zerops setup. Zerops runs the current app and the pull request version with separate data. Codex tests both through code, Chrome, live APIs, and service logs. GitHub gets the verdict and recorded proof after the temporary lab is gone.
+  Connect GitHub. Codex maps the repository and decides what must run. TrialRun turns that into a checked Zerops setup. Zerops starts the current app and the proposed change with separate data. Codex investigates both through code, Chrome, HTTP, and logs; GitHub gets the recorded proof after the lab is deleted.
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@ Zerops then deleted project `bm8bQgyTQrC23Kqm5spgnA` in process `t2l5VUuSRhuwTW6
 ## It reads the code. Then it tests the product.
 
 1. **Codex understands the change.** It searches the full repository, follows the code, and decides what needs to run and what could break.
-2. **Zerops boots both commits.** The base and PR run as separate live systems with separate data.
+2. **Zerops boots both versions.** The app running today and the pull request's proposed version get separate services and separate data.
 3. **Codex tests its own theory.** It drives Chrome, calls the app's APIs, reads logs, and changes course when the app surprises it.
 4. **GitHub gets the proof.** TrialRun saves the evidence, deletes the exact Zerops project, and only then publishes Codex's review.
 
@@ -47,7 +47,7 @@ Chrome is one testing tool, not the boundary. Codex can compare live HTTP status
 
 ![One Codex thread reads code, drives Chrome, tests live APIs, and reads Zerops service logs from either the managed runner or an optional customer ZCP workspace](docs/assets/trialrun-live-investigation.svg)
 
-For a Zerops review, TrialRun reads each app's recent output with `zcli service log` using that review's exact project and service IDs. It fetches base and PR separately, keeps at most 500 recent records, removes supplied test secrets, and gives Codex a bounded tail. Locally, the same tool reads the matching container logs. Codex gets useful app output without receiving Zerops credentials or arbitrary shell access.
+TrialRun gives Codex a short, read-only log tail from the exact current and pull-request services. Test secrets are removed first. That lets Codex connect a browser symptom to an API response, a service error, and the responsible code without receiving Zerops credentials or shell access.
 
 ## TrialRun creates the Zerops setup for every repository
 
@@ -83,6 +83,12 @@ TrialRun itself runs on Zerops as a web app, runner, PostgreSQL database, and ob
 - a native Chromium executor that both apps can reach over the project's private network.
 
 The runner waits for every service to become ready before Codex starts. When the review ends, it deletes that exact project ID and waits for Zerops to return `projectNotFound`.
+
+### Why Zerops makes this possible
+
+- **One private network.** The current app, proposed app, their separate data, and the test executor can reach one another without exposing the apps publicly.
+- **One platform for the whole stack.** Linux application containers run beside managed databases, caches, search, queues, and storage. TrialRun can generate the mix each repository actually needs.
+- **One disposable boundary.** Readiness checks tell TrialRun when testing can start. Service logs help Codex investigate. Project-level deletion removes the entire review lab when it is done.
 
 ## What GitHub gets
 
