@@ -2,7 +2,7 @@
   <img src="docs/assets/logos/trialrun.svg" width="72" height="72" alt="TrialRun" />
 </p>
 
-<h1 align="center">Codex runs your pull request against the live product—not just the diff.</h1>
+<h1 align="center">Codex runs your pull request against the live product.</h1>
 
 <p align="center">
   Connect GitHub. Codex maps the repository and decides what must run. TrialRun turns that into a checked Zerops setup. Zerops starts the current app and the proposed change with separate data. Codex investigates both through code, Chrome, HTTP, and logs; GitHub gets the recorded proof after the lab is deleted.
