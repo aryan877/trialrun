@@ -2,10 +2,10 @@
   <img src="docs/assets/logos/trialrun.svg" width="72" height="72" alt="TrialRun" />
 </p>
 
-<h1 align="center">A code review that opens the app.</h1>
+<h1 align="center">Codex tests the app you have and the app your pull request creates, live on Zerops.</h1>
 
 <p align="center">
-  Codex reads the PR, runs both commits on Zerops, drives their UIs in real Chrome, calls their APIs, and posts a video-backed verdict to GitHub after the test project is gone.
+  TrialRun starts both versions with separate data. Codex reads the code, drives Chrome, calls the live APIs, and checks Zerops logs. TrialRun posts the verdict, screenshots, and video to GitHub after Zerops deletes the test project.
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 ### A real PR. A real regression. Reproduced live.
 
-On [proof PR #4](https://github.com/aryan877/trialrun-proof/pull/4), Codex read the cart change, ran both commits, and clicked the same second product in each app. The base changed item two. The pull request changed item one. Live API calls still returned the right total, so Codex isolated the bug to the PR's browser handler and cited the exact lines.
+On [proof PR #4](https://github.com/aryan877/trialrun-proof/pull/4), Codex read the cart change, ran the existing app beside the pull request version, and clicked the same second product in each one. The existing app changed item two. The pull request changed item one. Live API calls still returned the right total, so Codex isolated the bug to the pull request's browser handler and cited the exact lines.
 
 [![TrialRun's public verdict for the reproduced pull request regression](docs/assets/screenshots/trialrun-verdict.jpg)](https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE)
 
