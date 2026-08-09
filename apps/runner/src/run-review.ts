@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import {
   appendReviewEvent,
@@ -22,6 +22,7 @@ import {
   agentRunMetricsSchema,
   agentTerminalReportSchema,
   decodeBase64Key,
+  derivePublicProofToken,
   decryptSecret,
   hashToken,
   randomToken,
@@ -47,14 +48,16 @@ import {
 import { runnerConfig, workspaceRoot } from "./config";
 import { loadAgentAccess, workspaceBridgeClient } from "./agent-access.js";
 import { assertReviewProviderMatchesRunner } from "./executor-source-preflight";
+import { stageGitHubSourceWithFreshToken } from "./github-source-staging";
 import {
   CodexLiveAgent,
   type LiveAgentLifecycleEvent,
   type LiveAgentRunResult,
 } from "./live-agent";
-import { decideLiveVerdict, validateAgentHandoff } from "./live-oracle";
+import { validateAgentReportProvenance } from "./agent-report-provenance";
 import { startRepositoryMcpServer, type RepositoryMcpServer } from "./repository-mcp";
 import { createRepositoryView } from "./repository-view";
+import { isReviewCancellationSignal } from "./review-cancellation";
 import {
   executorSourceDirectory,
   githubService,
@@ -151,6 +154,168 @@ function boundedRedactedLogs(logs: string, secretValues: readonly string[]): str
     .replace(/^\uFFFD/u, "")}`;
 }
 
+const applicationLogCollectionTimeoutMs = 35_000;
+
+export async function collectAvailableApplicationLogs(
+  environment: Pick<ExecutionEnvironment, "readLogs">,
+  secretValues: readonly string[],
+): Promise<{ readonly base: string; readonly head: string }> {
+  const readSide = async (side: "base" | "head"): Promise<string> => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        environment.readLogs(side),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error("Application log collection exceeded its time limit.")),
+            applicationLogCollectionTimeoutMs,
+          );
+        }),
+      ]);
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      const message = redactText(raw, secretValues).slice(0, 2_000);
+      return `[TrialRun could not collect ${side} application logs: ${message}]`;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  };
+
+  const [base, head] = await Promise.all([readSide("base"), readSide("head")]);
+  return { base, head };
+}
+
+export function pullRequestEvidenceComment(input: {
+  readonly detailsUrl: string;
+  readonly codeStrengthCount?: number;
+  readonly codeRiskCount?: number;
+  readonly evidence?: {
+    readonly baseScreenshotUrl: string;
+    readonly headScreenshotUrl: string;
+    readonly baseRecordingUrl: string;
+    readonly headRecordingUrl: string;
+  };
+}): string {
+  const proof = input.evidence
+    ? [
+        "",
+        "| Base commit | Pull request |",
+        "| --- | --- |",
+        `| ![Base evidence](${input.evidence.baseScreenshotUrl}) | ![Pull request evidence](${input.evidence.headScreenshotUrl}) |`,
+        "",
+        `[Watch base recording](${input.evidence.baseRecordingUrl}) · [Watch pull request recording](${input.evidence.headRecordingUrl})`,
+      ]
+    : [];
+  return [
+    "### TrialRun evidence is ready",
+    "",
+    "One Codex thread reviewed the change, tested the running applications through Chrome and HTTP, and wrote this verdict. The GitHub Check is the authoritative current status.",
+    "",
+    input.codeStrengthCount === undefined || input.codeRiskCount === undefined
+      ? "The live Codex investigation did not finish with a validated report."
+      : `Codex recorded **${input.codeStrengthCount} strengths** and **${input.codeRiskCount} code risks** in its review.`,
+    ...proof,
+    "",
+    `[Open recorded evidence, hashes, and Zerops deletion proof](${input.detailsUrl})`,
+    "",
+    "The disposable Zerops project was deleted before this comment was published.",
+  ].join("\n");
+}
+
+interface PublicProofLinks {
+  readonly detailsUrl: string;
+  readonly baseScreenshotUrl: string;
+  readonly headScreenshotUrl: string;
+  readonly baseRecordingUrl: string;
+  readonly headRecordingUrl: string;
+}
+
+function publicProofArtifactUrl(
+  appUrl: string,
+  reviewId: string,
+  token: string,
+  artifactId?: string,
+): string {
+  const path = artifactId
+    ? `/proof/reviews/${reviewId}/${token}/artifacts/${artifactId}`
+    : `/proof/reviews/${reviewId}/${token}`;
+  return new URL(path, appUrl).href;
+}
+
+async function publicProofLinks(input: {
+  readonly db: TrialRunDatabase;
+  readonly reviewId: string;
+}): Promise<PublicProofLinks | null> {
+  if (!runnerConfig.VAULT_KEY_BASE64) return null;
+  const rows = await input.db
+    .select()
+    .from(artifacts)
+    .where(
+      and(
+        eq(artifacts.reviewId, input.reviewId),
+        inArray(artifacts.kind, ["screenshot", "browser_recording"]),
+      ),
+    )
+    .orderBy(asc(artifacts.createdAt));
+  const baseScreenshot = rows.find(
+    ({ kind, side, metadata }) =>
+      kind === "screenshot" &&
+      side === "base" &&
+      typeof metadata["checkpointName"] === "string" &&
+      rows.some(
+        (candidate) =>
+          candidate.kind === "screenshot" &&
+          candidate.side === "head" &&
+          candidate.metadata["checkpointName"] === metadata["checkpointName"],
+      ),
+  );
+  const checkpointName = baseScreenshot?.metadata["checkpointName"];
+  const headScreenshot = rows.find(
+    ({ kind, side, metadata }) =>
+      kind === "screenshot" && side === "head" && metadata["checkpointName"] === checkpointName,
+  );
+  const baseRecording = rows.find(
+    ({ kind, side }) => kind === "browser_recording" && side === "base",
+  );
+  const headRecording = rows.find(
+    ({ kind, side }) => kind === "browser_recording" && side === "head",
+  );
+  if (!baseScreenshot || !headScreenshot || !baseRecording || !headRecording) {
+    return null;
+  }
+  const token = derivePublicProofToken(
+    input.reviewId,
+    decodeBase64Key(runnerConfig.VAULT_KEY_BASE64, "VAULT_KEY_BASE64"),
+  );
+  return {
+    detailsUrl: publicProofArtifactUrl(runnerConfig.APP_URL, input.reviewId, token),
+    baseScreenshotUrl: publicProofArtifactUrl(
+      runnerConfig.APP_URL,
+      input.reviewId,
+      token,
+      baseScreenshot.id,
+    ),
+    headScreenshotUrl: publicProofArtifactUrl(
+      runnerConfig.APP_URL,
+      input.reviewId,
+      token,
+      headScreenshot.id,
+    ),
+    baseRecordingUrl: publicProofArtifactUrl(
+      runnerConfig.APP_URL,
+      input.reviewId,
+      token,
+      baseRecording.id,
+    ),
+    headRecordingUrl: publicProofArtifactUrl(
+      runnerConfig.APP_URL,
+      input.reviewId,
+      token,
+      headRecording.id,
+    ),
+  };
+}
+
 async function persistLiveEvidence(input: {
   readonly db: TrialRunDatabase;
   readonly store: ArtifactStore;
@@ -192,6 +357,9 @@ async function persistLiveEvidence(input: {
     {
       state: input.evidence.status.state,
       assertionCount: input.evidence.assertions.length,
+      apiAssertionCount: input.evidence.assertions.filter(({ kind }) => kind.startsWith("api_"))
+        .length,
+      apiResponseCount: input.evidence.apiResponses.length,
       checkpointCount: input.evidence.checkpoints.length,
       eventCount: input.evidence.events.length,
       recordingCount: input.evidence.recordings.filter(({ captured }) => captured).length,
@@ -384,7 +552,7 @@ function createMission(input: {
         id: "investigate-live-behavior",
         kind: "investigate_live_behavior",
         objective:
-          "Interactively compare the real base and PR applications and reproduce the highest-value behavioral differences.",
+          "Interactively compare the real base and PR applications through their user interface and relevant HTTP endpoints, then reproduce the highest-value behavioral differences.",
         priority: "high",
       },
     ],
@@ -396,7 +564,8 @@ function createMission(input: {
       },
       {
         id: "runtime-difference",
-        question: "Which behavior differs between base and PR under equivalent live actions?",
+        question:
+          "Which browser or HTTP API behavior differs between base and PR under an equivalent live action or request?",
       },
       {
         id: "release-confidence",
@@ -411,6 +580,7 @@ function createMission(input: {
       "count_locators",
       "act_browser",
       "inspect_browser_events",
+      "request_application",
       "read_application_logs",
       "switch_side",
       "reset_side",
@@ -446,10 +616,10 @@ function redactAgentTerminalReport(
       ...finding,
       title: redact(finding.title),
       summary: redact(finding.summary),
-      verification:
-        finding.verification.state === "unproven"
-          ? { ...finding.verification, reason: redact(finding.verification.reason) }
-          : finding.verification,
+      verification: {
+        ...finding.verification,
+        reason: redact(finding.verification.reason),
+      },
     })),
     limitations: report.limitations.map(redact),
   });
@@ -494,12 +664,13 @@ export async function runReview(
   let workCompleted = false;
   const failures: Error[] = [];
   const secretValues: string[] = [];
-  let comparisonVerdict: "pass" | "fail" | "inconclusive" | null = null;
-  let comparisonSummary = "Review did not reach deterministic comparison.";
+  let agentVerdict: "pass" | "fail" | "inconclusive" | null = null;
+  let agentSummary = "Codex did not return a validated review.";
   let checkRunId = review.checkRunId;
   let source: Awaited<ReturnType<typeof reviewSource>> | null = null;
   let agentRun: LiveAgentRunResult | null = null;
   let githubPublished = false;
+  let publishCancellationCheck: (() => Promise<void>) | null = null;
 
   const rememberFailure = (error: unknown): Error => {
     const raw = error instanceof Error ? error.message : String(error);
@@ -526,9 +697,9 @@ export async function runReview(
     }
   };
 
-  const move = async (next: ReviewStatus, message: string): Promise<void> => {
-    await transitionReview(db, review.id, next, redactText(message, secretValues));
-    status = next;
+  const move = async (next: ReviewStatus, message: string): Promise<ReviewStatus> => {
+    status = await transitionReview(db, review.id, next, redactText(message, secretValues));
+    return status;
   };
 
   try {
@@ -568,17 +739,25 @@ export async function runReview(
       title: "TrialRun is provisioning both commits",
       summary: "The base and PR commits are being prepared from immutable GitHub SHAs.",
     });
-    const { token } = await github.getInstallationToken(
-      source.installation.githubInstallationId,
-      source.repository.githubRepositoryId,
-    );
-    staged = await stageGitHubReview({
-      owner: source.repository.owner,
-      repository: source.repository.name,
-      installationToken: token,
-      pullNumber: review.pullNumber,
-      baseSha: review.baseSha,
-      headSha: review.headSha,
+    const sourceForStage = source;
+    staged = await stageGitHubSourceWithFreshToken({
+      issueToken: () =>
+        github
+          .getInstallationToken(
+            sourceForStage.installation.githubInstallationId,
+            sourceForStage.repository.githubRepositoryId,
+          )
+          .then(({ token }) => token),
+      stage: (installationToken) =>
+        stageGitHubReview({
+          owner: sourceForStage.repository.owner,
+          repository: sourceForStage.repository.name,
+          installationToken,
+          pullNumber: review.pullNumber,
+          baseSha: review.baseSha,
+          headSha: review.headSha,
+        }),
+      ...(signal ? { signal } : {}),
     });
     const secrets = await loadTestSecrets(db, source.repository.id, source.recipe);
     secretValues.push(...Object.values(secrets));
@@ -635,7 +814,7 @@ export async function runReview(
       pullRequestTitle: pullRequest.title,
       secretNames: Object.keys(secrets),
     });
-    await move("planning", "Preparing a bounded live code-and-browser mission");
+    await move("planning", "Preparing a bounded live code, browser, and API mission");
     await db.update(reviews).set({ agentMission: mission }).where(eq(reviews.id, review.id));
     await safeEvent("mission.ready", mission.title, {
       missionId: mission.missionId,
@@ -657,7 +836,10 @@ export async function runReview(
       ...(agentAccess.mode === "codex_workspace" ? { network: remoteRepositoryMcpNetwork() } : {}),
     });
 
-    await move("running", "Codex is inspecting the PR and controlling both live applications");
+    await move(
+      "running",
+      "Codex is inspecting the PR and testing both live applications through Chrome and HTTP",
+    );
     signal?.throwIfAborted();
     const repositoryTools = {
       mcpUrl: repositoryMcpUrl(repositoryMcp, agentAccess.mode === "codex_workspace"),
@@ -738,11 +920,12 @@ export async function runReview(
     const completedAgentRun = agentRun;
 
     liveEvidence = await provisionedEnvironment.sealLiveReview();
-    await validateAgentHandoff({
+    await validateAgentReportProvenance({
       report: completedAgentRun.report,
       run: completedAgentRun,
       evidence: liveEvidence,
       repository: repositoryView,
+      missionId: mission.missionId,
       baseSha: review.baseSha,
       headSha: review.headSha,
     });
@@ -761,73 +944,57 @@ export async function runReview(
       })
       .where(eq(reviews.id, review.id));
 
-    const [baseLogs, headLogs] = await Promise.all([
-      environment.readLogs("base"),
-      environment.readLogs("head"),
-    ]);
+    const logs = await collectAvailableApplicationLogs(environment, secretValues);
     await persistLiveEvidence({
       db,
       store,
       reviewId: review.id,
       environment: provisionedEnvironment,
       evidence: liveEvidence,
-      baseLogs,
-      headLogs,
+      baseLogs: logs.base,
+      headLogs: logs.head,
       secretValues,
       scratch,
     });
     evidencePersisted = true;
 
-    await move("comparing", "Validating citations and deterministic matched evidence");
-    const comparison = decideLiveVerdict({
-      report: completedAgentRun.report,
-      evidence: liveEvidence,
-    });
-    comparisonVerdict = comparison.verdict;
-    comparisonSummary = comparison.summary;
+    await move("comparing", "Verifying Codex's code citations and recorded evidence");
+    agentVerdict = completedAgentRun.report.verdict;
+    agentSummary = completedAgentRun.report.evidenceSummary;
     await db.transaction(async (tx) => {
       await tx.delete(findings).where(eq(findings.reviewId, review.id));
       await tx
         .update(reviews)
-        .set({ verdict: comparison.verdict })
+        .set({ verdict: completedAgentRun.report.verdict })
         .where(eq(reviews.id, review.id));
-      const rows = [
-        ...comparison.findings.map((finding) => ({
-          reviewId: review.id,
-          severity: finding.severity,
-          kind: finding.kind,
-          title: finding.title,
-          summary: finding.summary,
-          firstDivergentStep: null,
-          evidence: finding.evidence,
-        })),
-        ...completedAgentRun.report.codeRiskFindings.map((finding) => ({
-          reviewId: review.id,
-          severity: finding.risk === "high" ? ("blocking" as const) : ("warning" as const),
-          kind: `code_risk_${finding.category}`,
-          title: finding.title,
-          summary: finding.summary,
-          firstDivergentStep: null,
-          evidence: {
-            findingId: finding.id,
-            sourceSha: finding.sourceSha,
-            citations: finding.citations,
-            verification: finding.verification,
-          },
-        })),
-      ];
+      const rows = completedAgentRun.report.codeRiskFindings.map((finding) => ({
+        reviewId: review.id,
+        severity: finding.risk === "high" ? ("blocking" as const) : ("warning" as const),
+        kind: `code_risk_${finding.category}`,
+        title: finding.title,
+        summary: finding.summary,
+        evidence: {
+          findingId: finding.id,
+          sourceSha: finding.sourceSha,
+          citations: finding.citations,
+          verification: finding.verification,
+        },
+      }));
       if (rows.length > 0) await tx.insert(findings).values(rows);
     });
-    await safeEvent(`verdict.${comparison.verdict}`, comparison.summary, {
-      runtimeFindingCount: comparison.findings.length,
+    await safeEvent(`verdict.${completedAgentRun.report.verdict}`, agentSummary, {
       codeRiskCount: completedAgentRun.report.codeRiskFindings.length,
       codeStrengthCount: completedAgentRun.report.codeStrengths.length,
     });
     await move("publishing", "Evidence is saved; GitHub closes after teardown is proven");
     workCompleted = true;
   } catch (error) {
-    const caught = rememberFailure(error);
-    await safeEvent("review.error", caught.message);
+    if (isReviewCancellationSignal(signal)) {
+      await safeEvent("review.cancel_requested", "Review cancellation reached the active runner");
+    } else {
+      const caught = rememberFailure(error);
+      await safeEvent("review.error", caught.message);
+    }
   }
 
   if (repositoryMcp) {
@@ -843,18 +1010,15 @@ export async function runReview(
       liveEvidence =
         liveEvidence ??
         (workCompleted ? await environment.sealLiveReview() : await environment.cancelLiveReview());
-      const [baseLogs, headLogs] = await Promise.all([
-        environment.readLogs("base"),
-        environment.readLogs("head"),
-      ]);
+      const logs = await collectAvailableApplicationLogs(environment, secretValues);
       await persistLiveEvidence({
         db,
         store,
         reviewId: review.id,
         environment,
         evidence: liveEvidence,
-        baseLogs,
-        headLogs,
+        baseLogs: logs.base,
+        headLogs: logs.head,
         secretValues,
         scratch,
       });
@@ -939,18 +1103,35 @@ export async function runReview(
 
   let firstFailure = failures[0];
   let finalVerdict: "pass" | "fail" | "inconclusive" =
-    firstFailure ||
-    !workCompleted ||
-    comparisonVerdict === null ||
-    comparisonVerdict === "inconclusive"
-      ? "inconclusive"
-      : comparisonVerdict;
-  let cancellationObserved = signal?.aborted === true;
+    firstFailure || !workCompleted || agentVerdict === null ? "inconclusive" : agentVerdict;
+  let cancellationObserved = isReviewCancellationSignal(signal);
   if (cancellationObserved) finalVerdict = "inconclusive";
 
   if (source && checkRunId) {
     const github = githubService();
-    const detailsUrl = new URL(`/app/reviews/${review.id}`, runnerConfig.APP_URL).href;
+    const ownerDetailsUrl = new URL(`/app/reviews/${review.id}`, runnerConfig.APP_URL).href;
+    let proofLinks: PublicProofLinks | undefined;
+    if (!firstFailure && !cancellationObserved && finalVerdict !== "inconclusive" && liveEvidence) {
+      try {
+        proofLinks = (await publicProofLinks({ db, reviewId: review.id })) ?? undefined;
+        if (!proofLinks) {
+          await safeEvent(
+            "proof.inline_unavailable",
+            "GitHub will link the private review because a complete paired media preview was not recorded",
+          );
+        }
+      } catch (error) {
+        const message = redactText(
+          error instanceof Error ? error.message : String(error),
+          secretValues,
+        );
+        await safeEvent("proof.inline_unavailable", message.slice(0, 2_000));
+      }
+    }
+    const detailsUrl = () =>
+      finalVerdict === "inconclusive" || cancellationObserved || !proofLinks
+        ? ownerDetailsUrl
+        : proofLinks.detailsUrl;
     const publishCheck = async () => {
       const conclusion = cancellationObserved
         ? "cancelled"
@@ -964,32 +1145,37 @@ export async function runReview(
         repository: source.repository.name,
         headSha: review.headSha,
         checkRunId,
-        detailsUrl,
+        detailsUrl: detailsUrl(),
         conclusion,
         title: cancellationObserved
           ? "Review was cancelled"
           : finalVerdict === "pass"
-            ? "PR matched the base behavior"
+            ? "Codex approved this pull request"
             : finalVerdict === "fail"
-              ? "Behavioral regression reproduced"
+              ? "Codex found blocking risks"
               : "Review was inconclusive",
         summary: cancellationObserved
           ? "Review cancellation was observed before GitHub publication completed. Available evidence was preserved and the disposable environment was cleaned up."
           : finalVerdict === "inconclusive"
-            ? (firstFailure?.message ?? comparisonSummary)
-            : comparisonSummary,
+            ? (firstFailure?.message ?? agentSummary)
+            : agentSummary,
         text: [
           "One live Codex thread reviewed the code and interactively tested both immutable commits.",
           agentRun
             ? `${agentRun.report.codeStrengths.length} code strengths and ${agentRun.report.codeRiskFindings.length} code risks were recorded.`
             : "The live agent did not produce a validated terminal report.",
-          "Open TrialRun for matched assertions, screenshots, application logs, and teardown proof.",
+          "Open TrialRun for Codex's cited evidence, screenshots, recordings, application logs, and teardown proof.",
         ].join("\n\n"),
       });
     };
+    publishCancellationCheck = async () => {
+      cancellationObserved = true;
+      finalVerdict = "inconclusive";
+      await publishCheck();
+    };
     try {
       await publishCheck();
-      if (!cancellationObserved && signal?.aborted) {
+      if (!cancellationObserved && isReviewCancellationSignal(signal)) {
         cancellationObserved = true;
         finalVerdict = "inconclusive";
         await publishCheck();
@@ -1000,26 +1186,25 @@ export async function runReview(
           owner: source.repository.owner,
           repository: source.repository.name,
           pullNumber: review.pullNumber,
-          body: [
-            `### TrialRun: ${finalVerdict}`,
-            "",
-            finalVerdict === "inconclusive"
-              ? (firstFailure?.message ?? comparisonSummary)
-              : comparisonSummary,
-            "",
-            agentRun
-              ? `Codex recorded **${agentRun.report.codeStrengths.length} strengths** and **${agentRun.report.codeRiskFindings.length} code risks** before the deterministic evidence oracle decided this result.`
-              : "The live Codex investigation did not finish with a validated report.",
-            "",
-            `[Matched evidence and teardown proof](${detailsUrl})`,
-          ].join("\n"),
+          body: pullRequestEvidenceComment({
+            detailsUrl: detailsUrl(),
+            ...(proofLinks && finalVerdict !== "inconclusive" && !cancellationObserved
+              ? { evidence: proofLinks }
+              : {}),
+            ...(agentRun
+              ? {
+                  codeStrengthCount: agentRun.report.codeStrengths.length,
+                  codeRiskCount: agentRun.report.codeRiskFindings.length,
+                }
+              : {}),
+          }),
         },
       );
       await safeEvent("github.check_published", "GitHub Check completed", { checkRunId });
       await safeEvent("github.comment_published", "Pull request comment published", {
         commentId,
       });
-      if (!cancellationObserved && signal?.aborted) {
+      if (!cancellationObserved && isReviewCancellationSignal(signal)) {
         cancellationObserved = true;
         finalVerdict = "inconclusive";
         await publishCheck();
@@ -1038,7 +1223,22 @@ export async function runReview(
     }
   }
 
-  cancellationObserved ||= signal?.aborted === true;
+  const alignCheckWithTerminalCancellation = async (actualStatus: ReviewStatus): Promise<void> => {
+    if (actualStatus !== "cancelled" || cancellationObserved) return;
+    const publish = publishCancellationCheck;
+    if (!publish) return;
+    try {
+      await publish();
+      await safeEvent("github.check_published", "GitHub Check updated for cancellation", {
+        ...(checkRunId ? { checkRunId } : {}),
+      });
+    } catch (error) {
+      const caught = rememberFailure(error);
+      await safeEvent("github.publish_failed", caught.message);
+    }
+  };
+
+  cancellationObserved ||= isReviewCancellationSignal(signal);
   if (cancellationObserved) {
     await db.update(reviews).set({ verdict: "inconclusive" }).where(eq(reviews.id, review.id));
     if (status !== "cancelled")
@@ -1048,17 +1248,19 @@ export async function runReview(
   if (failures[0] || finalVerdict === "inconclusive" || !githubPublished) {
     await db.update(reviews).set({ verdict: "inconclusive" }).where(eq(reviews.id, review.id));
     if (status !== "inconclusive") {
-      await move(
+      const actualStatus = await move(
         "inconclusive",
         failures[0]?.message ??
-          (githubPublished ? comparisonSummary : "GitHub publication was not fully verified."),
+          (githubPublished ? agentSummary : "GitHub publication was not fully verified."),
       );
+      await alignCheckWithTerminalCancellation(actualStatus);
     }
     return;
   }
   await db.update(reviews).set({ verdict: finalVerdict }).where(eq(reviews.id, review.id));
-  await move(
+  const actualStatus = await move(
     "completed",
     "Evidence saved, GitHub published, and disposable environment deletion confirmed",
   );
+  await alignCheckWithTerminalCancellation(actualStatus);
 }

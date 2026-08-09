@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
   LiveBrowserError,
   LiveBrowserSession,
-  maximumLiveBrowserRecordingArtifactBytes,
   type LiveBrowserBudgets,
+  type LiveApiRawResponse,
   type LiveBrowserRawEvent,
   type LiveBrowserRuntime,
   type LiveBrowserSessionOptions,
@@ -15,8 +15,12 @@ import {
   type LivePressKey,
   type LiveSelectOption,
 } from "./live-browser";
+import type { ResolvedLiveApiRequest } from "./live-api";
 import type { TestLocator } from "@trialrun/domain";
-import { liveBrowserEvidenceSchema } from "./live-protocol";
+import {
+  liveBrowserEvidenceSchema,
+  maximumLiveBrowserRecordingArtifactBytes,
+} from "./live-protocol";
 import type { ReviewSide } from "./types";
 
 const origins = {
@@ -61,7 +65,16 @@ class FakeSideController implements LiveBrowserSideController {
   matchCount = 1;
   visible = true;
   text = "Saved successfully";
+  apiResponse: LiveApiRawResponse = {
+    status: 200,
+    contentType: "application/json; charset=utf-8",
+    body: Uint8Array.from(Buffer.from('{"ok":true}', "utf8")),
+    bodyTruncated: false,
+  };
+  apiError?: Error;
+  readonly apiRequests: ResolvedLiveApiRequest[] = [];
   screenshotBytes = Uint8Array.from([137, 80, 78, 71]);
+  screenshotError?: Error;
   recordingBytes: Uint8Array;
   readonly recordingCaptureRequests: boolean[] = [];
   redirectUrl?: string;
@@ -159,9 +172,31 @@ class FakeSideController implements LiveBrowserSideController {
     return Promise.resolve(this.text);
   }
 
+  apiRequest(
+    request: ResolvedLiveApiRequest,
+    maximumResponseBytes: number,
+    signal: AbortSignal,
+  ): Promise<LiveApiRawResponse> {
+    signal.throwIfAborted();
+    this.#record("apiRequest");
+    this.apiRequests.push(request);
+    if (this.apiError) return Promise.reject(this.apiError);
+    const body = this.apiResponse.body.subarray(0, maximumResponseBytes);
+    return Promise.resolve({
+      status: this.apiResponse.status,
+      ...(this.apiResponse.contentType === undefined
+        ? {}
+        : { contentType: this.apiResponse.contentType }),
+      body: Uint8Array.from(body),
+      bodyTruncated:
+        this.apiResponse.bodyTruncated || this.apiResponse.body.byteLength > maximumResponseBytes,
+    });
+  }
+
   screenshot(signal: AbortSignal): Promise<Uint8Array> {
     signal.throwIfAborted();
     this.#record("screenshot");
+    if (this.screenshotError) return Promise.reject(this.screenshotError);
     return Promise.resolve(Uint8Array.from(this.screenshotBytes));
   }
 
@@ -382,9 +417,61 @@ describe("LiveBrowserSession origin and side isolation", () => {
     expect(runtime.all("head")).toHaveLength(1);
     expect(session.evidence().matchedCheckpointNames).toEqual(["account-ready"]);
   });
+
+  it("captures a paired checkpoint atomically and leaves its name retryable after failure", async () => {
+    const { session, runtime } = await sessionFixture();
+    const head = runtime.latest("head");
+    head.screenshotError = new Error("head screenshot failed");
+
+    await expect(session.checkpointPair({ name: "checkout-result" })).rejects.toThrow(
+      "head screenshot failed",
+    );
+    expect(session.evidence().checkpoints).toEqual([]);
+
+    delete head.screenshotError;
+    const pair = await session.checkpointPair({ name: "checkout-result" });
+    expect(pair.base).toMatchObject({ side: "base", name: "checkout-result", captured: true });
+    expect(pair.head).toMatchObject({ side: "head", name: "checkout-result", captured: true });
+    expect(session.evidence().matchedCheckpointNames).toEqual(["checkout-result"]);
+    expect(session.evidence().ledger.map(({ tool, outcome }) => ({ tool, outcome }))).toEqual([
+      { tool: "browser_checkpoint_pair", outcome: "error" },
+      { tool: "browser_checkpoint_pair", outcome: "success" },
+    ]);
+  });
+
+  it("rejects a paired checkpoint before capture when paths differ", async () => {
+    const { session, runtime } = await sessionFixture();
+    runtime.latest("head").url = `${origins.head}/different`;
+
+    await expect(session.checkpointPair({ name: "same-moment" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "INVALID_INPUT",
+    );
+    expect(session.evidence().checkpoints).toEqual([]);
+    expect(runtime.latest("base").calls).not.toContain("screenshot");
+    expect(runtime.latest("head").calls).not.toContain("screenshot");
+  });
 });
 
 describe("LiveBrowserSession secrets and evidence", () => {
+  it("rejects a secret-tainted paired checkpoint without capturing either side", async () => {
+    const secret = "secret-for-pair";
+    const { session, runtime } = await sessionFixture({ secrets: { TEST_PASSWORD: secret } });
+    const observation = await session.observe({ side: "base" });
+    await session.fill({
+      side: "base",
+      observationId: observation.id,
+      locator: button,
+      value: { kind: "secret", name: "TEST_PASSWORD" },
+    });
+
+    await expect(session.checkpointPair({ name: "signed-in" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "INVALID_INPUT",
+    );
+    expect(session.evidence().checkpoints).toEqual([]);
+    expect(runtime.latest("base").calls).not.toContain("screenshot");
+    expect(runtime.latest("head").calls).not.toContain("screenshot");
+  });
+
   it("uses approved named secrets internally while redacting observations, events, and ledger output", async () => {
     const secret = "swordfish-secret-value";
     const { session, runtime } = await sessionFixture({ secrets: { TEST_PASSWORD: secret } });
@@ -542,6 +629,195 @@ describe("LiveBrowserSession secrets and evidence", () => {
         assertion: { kind: "visible", target: button },
       }),
     ).rejects.toSatisfy((error: unknown) => errorCode(error) === "INVALID_INPUT");
+  });
+
+});
+
+describe("LiveBrowserSession API evidence", () => {
+  it("sends one dynamic authenticated request contract to both sides and records redacted matched assertions", async () => {
+    const secret = "api-token-canary-value";
+    const { session, runtime } = await sessionFixture({ secrets: { TEST_API_TOKEN: secret } });
+    runtime.latest("base").apiResponse = {
+      status: 200,
+      contentType: "application/json; charset=utf-8",
+      body: Uint8Array.from(
+        Buffer.from(JSON.stringify({ cart: { total: 36 }, tokenEcho: secret }), "utf8"),
+      ),
+      bodyTruncated: false,
+    };
+    runtime.latest("head").apiResponse = {
+      status: 200,
+      contentType: "application/json; charset=utf-8",
+      body: Uint8Array.from(
+        Buffer.from(JSON.stringify({ cart: { total: 24 }, tokenEcho: secret }), "utf8"),
+      ),
+      bodyTruncated: false,
+    };
+    const baseObservation = await session.observe({ side: "base" });
+    const headObservation = await session.observe({ side: "head" });
+
+    const pair = await session.apiRequestPair({
+      name: "cart-state-after-update",
+      request: {
+        method: "POST",
+        path: "/api/cart/update?line=2",
+        headers: [
+          {
+            name: "Authorization",
+            value: { kind: "secret", name: "TEST_API_TOKEN" },
+          },
+        ],
+        body: {
+          kind: "json_fields",
+          fields: { quantity: { kind: "literal", value: "2" } },
+        },
+      },
+    });
+
+    expect(runtime.latest("base").apiRequests[0]?.headers.Authorization).toBe(secret);
+    expect(runtime.latest("head").apiRequests[0]?.headers.Authorization).toBe(secret);
+    expect(pair.base).toMatchObject({
+      side: "base",
+      name: "cart-state-after-update",
+      path: "/api/cart/update?line=2",
+      status: 200,
+      bodyTruncated: false,
+    });
+    expect(pair.head.requestFingerprint).toBe(pair.base.requestFingerprint);
+    expect(pair.base.bodySha256).not.toBe(pair.head.bodySha256);
+    await expect(
+      session.count({ side: "base", observationId: baseObservation.id, locator: button }),
+    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "STALE_OBSERVATION");
+    await expect(
+      session.count({ side: "head", observationId: headObservation.id, locator: button }),
+    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "STALE_OBSERVATION");
+
+    const baseAssertion = await session.apiAssert({
+      side: "base",
+      name: "cart-total-contract",
+      responseId: pair.base.id,
+      assertion: { kind: "json_path_equals", path: ["cart", "total"], equals: 36 },
+    });
+    const headAssertion = await session.apiAssert({
+      side: "head",
+      name: "cart-total-contract",
+      responseId: pair.head.id,
+      assertion: { kind: "json_path_equals", path: ["cart", "total"], equals: 36 },
+    });
+    expect(baseAssertion).toMatchObject({ kind: "api_json", passed: true });
+    expect(headAssertion).toMatchObject({ kind: "api_json", passed: false });
+    expect(session.evidence().matchedAssertionNames).toContain("cart-total-contract");
+
+    await expect(session.checkpointPair({ name: "after-api-check" })).rejects.toSatisfy(
+      (error: unknown) => errorCode(error) === "INVALID_INPUT",
+    );
+    await expect(
+      session.checkpoint({ side: "base", name: "base-secret-safe" }),
+    ).resolves.toMatchObject({ captured: false });
+    await expect(
+      session.checkpoint({ side: "head", name: "head-secret-safe" }),
+    ).resolves.toMatchObject({ captured: false });
+    const serialized = JSON.stringify(session.evidence());
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain('"quantity":"2"');
+    expect(serialized).toContain("TEST_API_TOKEN");
+    expect(liveBrowserEvidenceSchema.parse(session.evidence()).apiResponses).toHaveLength(2);
+    const sealed = await session.seal("cancelled");
+    expect(sealed.recordings).toEqual([
+      expect.objectContaining({ side: "base", captured: false }),
+      expect.objectContaining({ side: "head", captured: false }),
+    ]);
+  });
+
+  it("redacts a secret that crosses the response boundary before applying the evidence cap", async () => {
+    const secret = "secret-boundary-value";
+    const { session, runtime } = await sessionFixture({
+      secrets: { TEST_API_TOKEN: secret },
+      budgets: { maxApiResponseBytes: 16 },
+    });
+    runtime.latest("base").apiResponse = {
+      status: 200,
+      contentType: "text/plain",
+      body: Uint8Array.from(Buffer.from(`${"x".repeat(12)}${secret}`, "utf8")),
+      bodyTruncated: false,
+    };
+
+    const response = await session.apiRequest({
+      side: "base",
+      name: "boundary-redaction",
+      request: { method: "GET", path: "/api/export" },
+    });
+
+    expect(response.bodyTruncated).toBe(true);
+    expect(response.capturedByteSize).toBeLessThanOrEqual(16);
+    expect(response.bodyPreview).not.toContain("secr");
+    expect(JSON.stringify(session.evidence())).not.toContain(secret);
+  });
+
+  it("records neither side when one request in a paired API call fails", async () => {
+    const { session, runtime } = await sessionFixture();
+    runtime.latest("head").apiError = new Error("head API unavailable");
+
+    await expect(
+      session.apiRequestPair({
+        name: "atomic-catalog-read",
+        request: { method: "GET", path: "/api/catalog" },
+      }),
+    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "INVALID_INPUT");
+
+    expect(session.evidence().apiResponses).toEqual([]);
+  });
+
+  it("caps response bodies, keeps status assertions usable, and rejects unsafe body evidence", async () => {
+    const { session, runtime } = await sessionFixture({ budgets: { maxApiResponseBytes: 12 } });
+    runtime.latest("base").apiResponse = {
+      status: 413,
+      contentType: "text/plain",
+      body: Uint8Array.from(Buffer.from("response-body-that-is-too-long", "utf8")),
+      bodyTruncated: false,
+    };
+
+    const response = await session.apiRequest({
+      side: "base",
+      name: "bounded-error-response",
+      request: { method: "GET", path: "/api/export" },
+    });
+    expect(response).toMatchObject({ status: 413, bodyTruncated: true, capturedByteSize: 12 });
+    await expect(
+      session.apiAssert({
+        side: "base",
+        name: "bounded-status",
+        responseId: response.id,
+        assertion: { kind: "status", equals: 413 },
+      }),
+    ).resolves.toMatchObject({ passed: true, kind: "api_status" });
+    await expect(
+      session.apiAssert({
+        side: "base",
+        name: "unsafe-truncated-body",
+        responseId: response.id,
+        assertion: { kind: "body_includes", includes: "response" },
+      }),
+    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "INVALID_INPUT");
+    await expect(
+      session.apiAssert({
+        side: "head",
+        name: "wrong-side-response",
+        responseId: response.id,
+        assertion: { kind: "status", equals: 413 },
+      }),
+    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "INVALID_INPUT");
+    await expect(
+      session.apiRequest({
+        side: "head",
+        name: "missing-secret-request",
+        request: {
+          method: "POST",
+          path: "/api/login",
+          headers: [{ name: "Authorization", value: { kind: "secret", name: "NOT_APPROVED" } }],
+        },
+      }),
+    ).rejects.toSatisfy((error: unknown) => errorCode(error) === "SECRET_NOT_APPROVED");
   });
 });
 

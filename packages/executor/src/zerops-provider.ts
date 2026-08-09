@@ -21,6 +21,7 @@ import {
   loadZeropsManifest,
   prepareZeropsManifest,
 } from "./zerops-manifest";
+import { findCapturedLiveArtifact } from "./live-artifact";
 import { assertMatchesZeropsSchema, compileZeropsSchema } from "./zerops-schema";
 import { liveBrowserEvidenceEnvelopeSchema } from "./live-protocol";
 import type {
@@ -30,6 +31,7 @@ import type {
   ReviewSide,
   TeardownProof,
 } from "./types";
+import { isZeropsProjectAbsentResponse } from "./zerops-api-response";
 
 const processSchema = z
   .object({
@@ -49,7 +51,13 @@ const importResponseSchema = z.object({
       processes: z.array(processSchema),
     }),
   ),
-});
+  });
+
+const applicationLogCollectionTimeoutMs = 30_000;
+
+function independentApplicationLogSignal(): AbortSignal {
+  return AbortSignal.timeout(applicationLogCollectionTimeoutMs);
+}
 
 const serviceStackSchema = z
   .object({
@@ -156,27 +164,41 @@ export interface ZeropsExecutionProviderOptions {
   readonly timeoutMs?: number;
 }
 
-function publicUrlFromProject(
-  project: z.infer<typeof projectSchema>,
+function publicUrlFromService(
+  service: z.infer<typeof serviceStackSchema>,
   hostname: string,
   port: number,
 ): string {
-  const subdomainHost = project.zeropsSubdomainHost;
-  if (!subdomainHost) throw new Error("Zerops project did not expose its generated subdomain host.");
-  const candidate = new URL(`https://${subdomainHost}`);
+  const subdomainValues = service.userData.filter(({ key }) => key === "zeropsSubdomain");
+  if (subdomainValues.length !== 1) {
+    throw new Error("Zerops service did not expose exactly one generated subdomain URL.");
+  }
+  const content = subdomainValues[0]?.content;
+  if (!content) throw new Error("Zerops service returned an empty generated subdomain URL.");
+  let candidate: URL;
+  try {
+    candidate = new URL(content);
+  } catch {
+    throw new Error("Zerops service returned an invalid generated subdomain URL.");
+  }
+  const expectedLabelSuffix = port === 80 ? "" : `-${port}`;
+  const firstLabel = candidate.hostname.split(".")[0];
   if (
-    candidate.hostname !== subdomainHost ||
+    candidate.protocol !== "https:" ||
+    candidate.username !== "" ||
+    candidate.password !== "" ||
+    candidate.port !== "" ||
+    candidate.pathname !== "/" ||
+    candidate.search !== "" ||
+    candidate.hash !== "" ||
     !candidate.hostname.endsWith(".zerops.app") ||
-    candidate.hostname.split(".").length < 4
+    candidate.hostname.split(".").length < 4 ||
+    !firstLabel?.startsWith(`${hostname}-`) ||
+    !firstLabel.endsWith(expectedLabelSuffix)
   ) {
-    throw new Error("Zerops project returned an invalid generated subdomain host.");
+    throw new Error("Zerops service returned an invalid generated subdomain URL.");
   }
-  const [prefix, ...zone] = candidate.hostname.split(".");
-  if (!prefix || zone.length < 3) {
-    throw new Error("Zerops project returned an incomplete generated subdomain host.");
-  }
-  const portSuffix = port === 80 ? "" : `-${port}`;
-  return `https://${hostname}-${prefix}${portSuffix}.${zone.join(".")}`;
+  return candidate.origin;
 }
 
 function encodeTestSecrets(secrets: Readonly<Record<string, string>>): string {
@@ -300,7 +322,20 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
         signal: AbortSignal.timeout(30_000),
       },
     );
-    if (response.status === 404) return true;
+    const text = await response.text();
+    if (Buffer.byteLength(text, "utf8") > 64 * 1_024) {
+      throw new Error("Zerops project absence check returned an oversized response.");
+    }
+    let body: unknown = null;
+    if (text.length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(text);
+        body = parsed;
+      } catch {
+        throw new Error("Zerops project absence check returned invalid JSON.");
+      }
+    }
+    if (isZeropsProjectAbsentResponse(response.status, body)) return true;
     if (!response.ok) throw new Error(`Zerops project absence check returned HTTP ${response.status}.`);
     return false;
   }
@@ -323,6 +358,16 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
     throw new Error(`Timed out waiting for Zerops process ${processId}.`);
   }
 
+  async #waitForProjectAbsence(projectId: string, signal?: AbortSignal): Promise<void> {
+    const deadline = Date.now() + this.#options.timeoutMs;
+    while (Date.now() < deadline) {
+      signal?.throwIfAborted();
+      if (await this.#projectIsAbsent(projectId)) return;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
+    }
+    throw new Error(`Timed out waiting for exact Zerops project ${projectId} deletion proof.`);
+  }
+
   async #waitForPublicExecutor(executorUrl: string, signal?: AbortSignal): Promise<void> {
     const deadline = Date.now() + this.#options.timeoutMs;
     const healthUrl = new URL("/health", executorUrl);
@@ -342,6 +387,43 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
     }
     throw new Error(`Timed out waiting for the public TrialRun executor health gate: ${lastStatus}.`);
+  }
+
+  async #enablePublicService(
+    serviceId: string,
+    hostname: string,
+    port: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const enableProcess = processSchema.parse(
+      await this.#request(
+        `/service-stack/${encodeURIComponent(serviceId)}/enable-subdomain-access`,
+        { method: "PUT", ...(signal ? { signal } : {}) },
+      ),
+    );
+    await this.#waitForProcess(enableProcess.id, signal);
+
+    const deadline = Date.now() + this.#options.timeoutMs;
+    let lastState = "subdomain access has not propagated";
+    while (Date.now() < deadline) {
+      signal?.throwIfAborted();
+      const service = serviceStackSchema.parse(
+        await this.#request(`/service-stack/${encodeURIComponent(serviceId)}`, {
+          ...(signal ? { signal } : {}),
+        }),
+      );
+      if (service.subdomainAccess) {
+        try {
+          return publicUrlFromService(service, hostname, port);
+        } catch (error) {
+          lastState = error instanceof Error ? error.message : String(error);
+        }
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
+    }
+    throw new Error(
+      `Timed out waiting for Zerops public access on service ${hostname}: ${lastState}.`,
+    );
   }
 
   async #runZcli(
@@ -497,8 +579,6 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
                 TRIALRUN_REVIEW_ID: input.reviewId,
                 TRIALRUN_BASE_URL: baseUrl,
                 TRIALRUN_HEAD_URL: headUrl,
-                TRIALRUN_BASE_HEALTH_PATH: primaryDeployment.healthPath,
-                TRIALRUN_HEAD_HEALTH_PATH: primaryDeployment.healthPath,
                 TRIALRUN_TEST_SECRETS_BASE64: encodeTestSecrets(input.secrets),
               }
             : {};
@@ -553,14 +633,13 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
             executorToken,
           );
         }
-        const executorService = serviceStackSchema.parse(
-          await this.#request(`/service-stack/${encodeURIComponent(serviceByHostname("executor").id)}`, {
-            ...(input.signal ? { signal: input.signal } : {}),
-          }),
+        const executorServiceId = serviceByHostname("executor").id;
+        const executorUrl = await this.#enablePublicService(
+          executorServiceId,
+          "executor",
+          3_000,
+          input.signal,
         );
-        if (!executorService.subdomainAccess) {
-          throw new Error("Zerops did not enable public subdomain access for the live executor.");
-        }
         const project = projectSchema.parse(
           await this.#request(`/project/${encodeURIComponent(imported.projectId)}`, {
             ...(input.signal ? { signal: input.signal } : {}),
@@ -575,11 +654,9 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
           ({ deployment }) => deployment.side === "executor",
         )?.deployment;
         if (!executorDeployment) throw new Error("Compiled topology is missing the executor deployment.");
-        const executorUrl = publicUrlFromProject(
-          project,
-          executorDeployment.hostname,
-          executorDeployment.port,
-        );
+        if (executorDeployment.hostname !== "executor" || executorDeployment.port !== 3_000) {
+          throw new Error("Compiled executor deployment does not match the public access contract.");
+        }
         await this.#waitForPublicExecutor(executorUrl, input.signal);
         const executorRequest = async (path: string, init: RequestInit = {}): Promise<Response> => {
           const response = await fetch(new URL(path, executorUrl), {
@@ -618,25 +695,23 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
         readLiveArtifact: async (artifactId: string) => {
           const validatedArtifactId = liveArtifactIdSchema.parse(artifactId);
           const evidence = await readLiveEvidence();
-          const checkpoint = evidence.checkpoints.find(
-            (candidate) => candidate.artifactId === validatedArtifactId,
-          );
-          if (!checkpoint?.captured || !checkpoint.digest || !checkpoint.byteSize) {
-            throw new Error("Live artifact is not present in the sealed evidence manifest.");
-          }
+          const artifact = findCapturedLiveArtifact(evidence, validatedArtifactId);
           const response = await executorRequest(
             `/artifacts/${encodeURIComponent(validatedArtifactId)}`,
           );
           const declaredLength = Number(response.headers.get("content-length"));
-          if (declaredLength !== checkpoint.byteSize) {
+          if (declaredLength !== artifact.byteSize) {
             throw new Error("Live artifact response length does not match its evidence manifest.");
           }
+          if (response.headers.get("content-type") !== artifact.mediaType) {
+            throw new Error("Live artifact response type does not match its evidence manifest.");
+          }
           const bytes = new Uint8Array(await response.arrayBuffer());
-          if (bytes.byteLength !== checkpoint.byteSize) {
+          if (bytes.byteLength !== artifact.byteSize) {
             throw new Error("Live artifact byte length does not match its evidence manifest.");
           }
           const digest = createHash("sha256").update(bytes).digest("hex");
-          if (digest !== checkpoint.digest) {
+          if (digest !== artifact.digest) {
             throw new Error("Live artifact digest does not match its evidence manifest.");
           }
           return bytes;
@@ -668,7 +743,7 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
               "500",
             ],
             Object.values(input.secrets),
-            input.signal,
+            independentApplicationLogSignal(),
           ),
         destroy: async (): Promise<TeardownProof> => {
           const startedAt = new Date().toISOString();
@@ -698,15 +773,13 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
             deletionProcessId = process.id;
           }
           await this.#waitForProcess(deletionProcessId);
-          const deleted = await this.#projectIsAbsent(imported.projectId);
+          await this.#waitForProjectAbsence(imported.projectId);
           return {
             startedAt,
             completedAt: new Date().toISOString(),
             providerProjectId: imported.projectId,
-            deleted,
-            message: deleted
-              ? `Zerops deletion process ${deletionProcessId} finished and the project is absent.`
-              : `Zerops deletion process ${deletionProcessId} finished but the project still resolves.`,
+            deleted: true,
+            message: `Zerops deletion process ${deletionProcessId} finished and the exact project endpoint returned projectNotFound.`,
           };
         },
           metadata: {
@@ -738,6 +811,7 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
               }),
             );
             await this.#waitForProcess(process.id);
+            await this.#waitForProjectAbsence(imported.projectId);
           }
         } catch {
           // Preserve the provisioning error. The DB-owned orphan reaper must retry this exact ID.
@@ -752,7 +826,10 @@ export class ZeropsExecutionProvider implements ExecutionProvider {
 
 export const zeropsSchemasForTest = {
   assertOwnedReviewProject,
+  independentApplicationLogSignal,
   importResponseSchema,
+  isZeropsProjectAbsentResponse,
   processSchema,
+  publicUrlFromService,
   serviceStackSchema,
 };

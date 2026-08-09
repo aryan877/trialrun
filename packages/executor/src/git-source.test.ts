@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { stageGitHubReview } from "./git-source";
+import { RetryableGitHubSourceAccessError, stageGitHubReview } from "./git-source";
 
 const execFileAsync = promisify(execFile);
 const pullNumber = 42;
@@ -17,6 +17,7 @@ let root = "";
 let stagingParent = "";
 let baseSha = "";
 let headSha = "";
+let gitBinary = "";
 
 async function runGit(workingDirectory: string, args: readonly string[]): Promise<string> {
   const { stdout } = await execFileAsync("git", [...args], {
@@ -27,6 +28,7 @@ async function runGit(workingDirectory: string, args: readonly string[]): Promis
 }
 
 beforeAll(async () => {
+  gitBinary = (await execFileAsync("/usr/bin/which", ["git"], { encoding: "utf8" })).stdout.trim();
   root = await mkdtemp(join(tmpdir(), "trialrun-github-source-test-"));
   const source = join(root, "source");
   const remote = join(root, "remote.git");
@@ -130,5 +132,42 @@ describe("GitHub review source staging", () => {
       }),
     ).rejects.toThrow();
     expect(await readdir(stagingParent)).toEqual([]);
+  });
+
+  it("classifies GitHub's exact private-repository visibility failure and removes staging", async () => {
+    const fakeBin = join(root, "fake-bin");
+    const fakeGit = join(fakeBin, "git");
+    await mkdir(fakeBin);
+    await writeFile(
+      fakeGit,
+      `#!/bin/sh
+if [ "$1" = "fetch" ]; then
+  printf '%s\n' 'remote: Repository not found.' >&2
+  exit 128
+fi
+exec '${gitBinary}' "$@"
+`,
+      { encoding: "utf8", mode: 0o700 },
+    );
+    await chmod(fakeGit, 0o700);
+    const originalPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${originalPath ?? ""}`;
+    try {
+      const error = await stageGitHubReview({
+        owner: "trialrun",
+        repository: "example",
+        installationToken,
+        pullNumber,
+        baseSha,
+        headSha,
+        stagingParent,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(RetryableGitHubSourceAccessError);
+      expect(String(error)).not.toContain(installationToken);
+      expect(await readdir(stagingParent)).toEqual([]);
+    } finally {
+      process.env.PATH = originalPath;
+    }
   });
 });

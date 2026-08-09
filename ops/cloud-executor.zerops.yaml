@@ -1,7 +1,7 @@
 zerops:
   - setup: executor
     build:
-      base: alpine/nodejs@24
+      base: ubuntu/nodejs@24
       deployFiles: .
     deploy:
       readinessCheck:
@@ -9,23 +9,12 @@ zerops:
           port: 3000
           path: /health
     run:
-      base: alpine/docker@26.1.5
+      base: ubuntu/nodejs@24
       prepareCommands:
-        - docker image pull mcr.microsoft.com/playwright:v1.62.1-noble
+        - PLAYWRIGHT_BROWSERS_PATH=/home/zerops/.cache/ms-playwright PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 npx --yes playwright@1.62.1 install --with-deps --only-shell chromium
+      envVariables:
+        PLAYWRIGHT_BROWSERS_PATH: /home/zerops/.cache/ms-playwright
       ports:
         - port: 3000
           httpSupport: true
-      start: >-
-        docker run --rm --init --network=host
-        --volume /var/www:/workspace
-        --workdir /workspace
-        --env PORT
-        --env TRIALRUN_EXECUTION_TOKEN
-        --env TRIALRUN_REVIEW_ID
-        --env TRIALRUN_BASE_URL
-        --env TRIALRUN_HEAD_URL
-        --env TRIALRUN_BASE_HEALTH_PATH
-        --env TRIALRUN_HEAD_HEALTH_PATH
-        --env TRIALRUN_TEST_SECRETS_BASE64
-        mcr.microsoft.com/playwright:v1.62.1-noble
-        ./node_modules/.bin/tsx src/index.ts
+      start: ./node_modules/.bin/tsx src/index.ts

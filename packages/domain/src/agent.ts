@@ -207,16 +207,32 @@ export const recordedEvidenceIdSchema = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/, "Expected an opaque recorded evidence ID.");
 
-const codeRiskVerificationSchema = z.discriminatedUnion("state", [
-  z.strictObject({
-    state: z.literal("unproven"),
-    reason: z.string().min(1).max(1_000),
-  }),
-  z.strictObject({
-    state: z.literal("reproduced"),
-    evidenceIds: z.array(recordedEvidenceIdSchema).min(1).max(50),
-  }),
-]);
+const codeRiskVerificationSchema = z
+  .strictObject({
+    state: z.enum(["unproven", "reproduced"]),
+    reason: z.string().max(1_000),
+    evidenceIds: z.array(recordedEvidenceIdSchema).max(50),
+  })
+  .superRefine((verification, context) => {
+    if (
+      verification.state === "unproven" &&
+      (verification.reason.length === 0 || verification.evidenceIds.length !== 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "An unproven code risk requires a reason and no reproduction evidence IDs.",
+      });
+    }
+    if (
+      verification.state === "reproduced" &&
+      (verification.reason.length !== 0 || verification.evidenceIds.length === 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A reproduced code risk requires evidence IDs and an empty reason.",
+      });
+    }
+  });
 
 export const staticCodeRiskFindingSchema = z
   .strictObject({
@@ -286,16 +302,16 @@ export const agentQuestionAnswerSchema = z.strictObject({
 
 export const agentTerminalReportSchema = z
   .strictObject({
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(2),
     missionId: z.string().uuid(),
     termination: z.enum(["mission_complete", "budget_exhausted", "cancelled", "tool_error"]),
+    verdict: z.enum(["pass", "fail", "inconclusive"]),
     evidenceSummary: z.string().min(1).max(4_000),
-    evidenceIds: z.array(recordedEvidenceIdSchema).max(250),
+    evidenceIds: z.array(recordedEvidenceIdSchema).min(1).max(250),
     questionAnswers: z.array(agentQuestionAnswerSchema).max(20),
     codeStrengths: z.array(staticCodeStrengthFindingSchema).max(30),
     codeRiskFindings: z.array(staticCodeRiskFindingSchema).max(50),
     limitations: z.array(z.string().min(1).max(500)).max(20),
-    oracleHandoff: z.literal("required"),
   })
   .superRefine((report, context) => {
     const recordedEvidenceIds = new Set(report.evidenceIds);

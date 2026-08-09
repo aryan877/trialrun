@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { LiveBrowserEvidence } from "./live-browser";
-import { liveBrowserEvidenceSchema } from "./live-protocol";
+import {
+  liveBrowserEvidenceSchema,
+  maximumLiveBrowserRecordingArtifactBytes,
+} from "./live-protocol";
 
 const timestamp = "2026-08-08T12:00:00.000Z";
 
@@ -49,6 +52,7 @@ function evidence(): LiveBrowserEvidence {
       },
     ],
     matchedAssertionNames: ["checkout-total"],
+    apiResponses: [],
     checkpoints: [],
     matchedCheckpointNames: [],
     recordings: [],
@@ -113,6 +117,103 @@ describe("liveBrowserEvidenceSchema", () => {
     ).toThrow("Assertion");
   });
 
+  it("validates paired API responses and their same-side deterministic assertions", () => {
+    const baseResponseId = `response:${"1".repeat(64)}`;
+    const headResponseId = `response:${"2".repeat(64)}`;
+    const apiEvidence: LiveBrowserEvidence = {
+      ...evidence(),
+      assertions: [
+        {
+          id: "assert:api-base",
+          name: "cart-total-api",
+          sequence: 1,
+          side: "base",
+          stateVersion: 1,
+          path: "/api/cart",
+          kind: "api_json",
+          locatorFingerprint: "3".repeat(64),
+          sourceResponseId: baseResponseId,
+          passed: true,
+          expected: "JSON cart.total equals 36",
+          actual: "36",
+          createdAt: timestamp,
+        },
+        {
+          id: "assert:api-head",
+          name: "cart-total-api",
+          sequence: 2,
+          side: "head",
+          stateVersion: 1,
+          path: "/api/cart",
+          kind: "api_json",
+          locatorFingerprint: "3".repeat(64),
+          sourceResponseId: headResponseId,
+          passed: false,
+          expected: "JSON cart.total equals 36",
+          actual: "24",
+          createdAt: timestamp,
+        },
+      ],
+      matchedAssertionNames: ["cart-total-api"],
+      apiResponses: [
+        {
+          id: baseResponseId,
+          name: "cart-state",
+          sequence: 1,
+          side: "base",
+          stateVersion: 1,
+          method: "GET",
+          path: "/api/cart",
+          requestFingerprint: "4".repeat(64),
+          status: 200,
+          contentType: "application/json",
+          bodySha256: "5".repeat(64),
+          bodyPreview: '{"cart":{"total":36}}',
+          bodyTruncated: false,
+          capturedByteSize: 21,
+          createdAt: timestamp,
+        },
+        {
+          id: headResponseId,
+          name: "cart-state",
+          sequence: 2,
+          side: "head",
+          stateVersion: 1,
+          method: "GET",
+          path: "/api/cart",
+          requestFingerprint: "4".repeat(64),
+          status: 200,
+          contentType: "application/json",
+          bodySha256: "6".repeat(64),
+          bodyPreview: '{"cart":{"total":24}}',
+          bodyTruncated: false,
+          capturedByteSize: 21,
+          createdAt: timestamp,
+        },
+      ],
+    };
+
+    expect(liveBrowserEvidenceSchema.parse(apiEvidence).apiResponses).toHaveLength(2);
+    expect(() =>
+      liveBrowserEvidenceSchema.parse({
+        ...apiEvidence,
+        assertions: [
+          { ...apiEvidence.assertions[0], sourceResponseId: headResponseId },
+          apiEvidence.assertions[1],
+        ],
+      }),
+    ).toThrow("same review side");
+    expect(() =>
+      liveBrowserEvidenceSchema.parse({
+        ...apiEvidence,
+        assertions: [
+          { ...apiEvidence.assertions[0], sourceResponseId: undefined },
+          apiEvidence.assertions[1],
+        ],
+      }),
+    ).toThrow("require a source response");
+  });
+
   it("validates exact sealed base/head recording manifests", () => {
     expect(liveBrowserEvidenceSchema.parse(sealedEvidence()).recordings).toHaveLength(2);
 
@@ -140,7 +241,10 @@ describe("liveBrowserEvidenceSchema", () => {
       liveBrowserEvidenceSchema.parse({
         ...oversized,
         recordings: [
-          { ...oversized.recordings[0], byteSize: 64 * 1_024 * 1_024 + 1 },
+          {
+            ...oversized.recordings[0],
+            byteSize: maximumLiveBrowserRecordingArtifactBytes + 1,
+          },
           oversized.recordings[1],
         ],
       }),

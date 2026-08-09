@@ -56,7 +56,6 @@ export const supportedZeropsApplicationTypes = [
 
 export const supportedZeropsRuntimeTypes = [
   ...supportedZeropsApplicationTypes,
-  "alpine/docker@26.1.5",
 ] as const;
 
 export const supportedZeropsBuildTypes = [
@@ -945,13 +944,16 @@ export function compileZeropsReviewTopology(
 
   services.push({
     hostname: "executor",
-    type: "alpine/docker@26.1.5",
+    type: "ubuntu/nodejs@24",
     enableSubdomainAccess: true,
     verticalAutoscaling: {
       cpuMode: "SHARED",
-      cpu: executorResources.cpu,
-      ram: executorResources.ramGb,
-      disk: executorResources.diskGb,
+      minCpu: executorResources.cpu,
+      maxCpu: executorResources.cpu,
+      minRam: executorResources.ramGb,
+      maxRam: executorResources.ramGb,
+      minDisk: executorResources.diskGb,
+      maxDisk: executorResources.diskGb,
     },
   });
   deployments.push({

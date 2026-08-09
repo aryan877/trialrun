@@ -7,6 +7,7 @@ import {
   failRepositoryAnalysis,
   heartbeatJob,
   heartbeatRepositoryAnalysis,
+  isReviewCancellationRequested,
   recoverExpiredJobs,
   recoverExpiredRepositoryAnalyses,
   succeedJob,
@@ -20,6 +21,7 @@ import {
   ZeropsCleanupWorker,
 } from "./cleanup-worker";
 import { runRepositoryAnalysis } from "./run-analysis";
+import { isReviewCancellationSignal, ReviewCancellationError } from "./review-cancellation";
 import { runReview } from "./run-review";
 import { WorkspaceLifecycleWorker } from "./workspace-lifecycle";
 import { ZeropsWorkspacePlatformClient } from "./workspace-platform";
@@ -176,6 +178,7 @@ while (!stopping) {
 
   const jobController = new AbortController();
   let heartbeatRunning = false;
+  let cancellationPollRunning = false;
   const heartbeat = setInterval(
     () => {
       if (heartbeatRunning) return;
@@ -196,20 +199,38 @@ while (!stopping) {
     },
     Math.floor((runnerConfig.RUNNER_LEASE_SECONDS * 1_000) / 3),
   );
+  const cancellationPoll = setInterval(() => {
+    if (cancellationPollRunning || jobController.signal.aborted) return;
+    cancellationPollRunning = true;
+    void isReviewCancellationRequested(connection.db, claimed.review.id)
+      .then((requested) => {
+        if (requested) jobController.abort(new ReviewCancellationError());
+      })
+      .catch((error: unknown) => jobController.abort(error))
+      .finally(() => {
+        cancellationPollRunning = false;
+      });
+  }, runnerConfig.RUNNER_POLL_MS);
   const timeout = setTimeout(
     () => jobController.abort(new Error("Review exceeded the configured runner timeout.")),
     runnerConfig.RUNNER_JOB_TIMEOUT_SECONDS * 1_000,
   );
 
   try {
+    if (await isReviewCancellationRequested(connection.db, claimed.review.id)) {
+      jobController.abort(new ReviewCancellationError());
+    }
     await runReview(connection.db, claimed.review, jobController.signal);
-    jobController.signal.throwIfAborted();
+    if (!isReviewCancellationSignal(jobController.signal)) {
+      jobController.signal.throwIfAborted();
+    }
     await succeedJob(connection.db, claimed.job.id, runnerConfig.RUNNER_ID);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await failJob(connection.db, claimed.job, runnerConfig.RUNNER_ID, message);
   } finally {
     clearInterval(heartbeat);
+    clearInterval(cancellationPoll);
     clearTimeout(timeout);
   }
 }

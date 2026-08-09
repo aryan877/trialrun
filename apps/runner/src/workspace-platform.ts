@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { redactText } from "@trialrun/domain";
-import { assertMatchesZeropsSchema, compileZeropsSchema } from "@trialrun/executor";
+import {
+  assertMatchesZeropsSchema,
+  compileZeropsSchema,
+  isZeropsProjectAbsentResponse,
+} from "@trialrun/executor";
 import { stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 
@@ -43,7 +47,6 @@ const projectSchema = z
     description: z.string().nullable(),
     tagList: z.array(z.string()),
     status: z.string(),
-    zeropsSubdomainHost: z.string().min(1).nullable(),
   })
   .passthrough();
 const serviceSchema = z
@@ -52,6 +55,16 @@ const serviceSchema = z
     projectId: zeropsIdSchema,
     name: z.string().min(1).max(100),
     subdomainAccess: z.boolean(),
+    userData: z
+      .array(
+        z
+          .object({
+            key: z.string().min(1).max(100),
+            content: z.string().max(8_000),
+          })
+          .passthrough(),
+      )
+      .max(1_000),
   })
   .passthrough();
 const workspaceImportSchema = z.strictObject({
@@ -78,6 +91,7 @@ const workspaceImportSchema = z.strictObject({
 const workspaceTags = ["trialrun", "codex-workspace"] as const;
 const workspaceHostname = "codexworkspace";
 const bridgePort = 8787;
+const maximumApiResponseBytes = 1_000_000;
 
 type FetchFunction = (url: string, init: RequestInit) => Promise<Response>;
 type SleepFunction = (milliseconds: number, signal: AbortSignal) => Promise<void>;
@@ -132,15 +146,60 @@ function ownershipDescription(connectionId: string, ownershipHash: string): stri
   return `TrialRun Codex workspace ${z.string().uuid().parse(connectionId)}; ownership-sha256=${ownershipHashSchema.parse(ownershipHash)}`;
 }
 
-function bridgeUrlFromProject(project: z.infer<typeof projectSchema>): string {
-  const host = project.zeropsSubdomainHost;
-  if (!host) throw new Error("Zerops workspace project does not have a generated subdomain host.");
-  const parts = host.split(".");
-  const prefix = parts.shift();
-  if (!prefix || parts.length < 3 || !host.endsWith(".zerops.app")) {
-    throw new Error("Zerops workspace project returned an invalid generated subdomain host.");
+function bridgeUrlFromService(service: z.infer<typeof serviceSchema>): string {
+  const subdomains = service.userData.filter(({ key }) => key === "zeropsSubdomain");
+  if (subdomains.length !== 1) {
+    throw new Error("Zerops workspace service did not expose exactly one generated subdomain URL.");
   }
-  return `https://${workspaceHostname}-${prefix}-${bridgePort}.${parts.join(".")}`;
+  const content = subdomains[0]?.content;
+  if (!content) throw new Error("Zerops workspace service returned an empty subdomain URL.");
+
+  let candidate: URL;
+  try {
+    candidate = new URL(content);
+  } catch {
+    throw new Error("Zerops workspace service returned an invalid generated subdomain URL.");
+  }
+  const firstLabel = candidate.hostname.split(".")[0];
+  if (
+    candidate.protocol !== "https:" ||
+    candidate.username !== "" ||
+    candidate.password !== "" ||
+    candidate.port !== "" ||
+    candidate.pathname !== "/" ||
+    candidate.search !== "" ||
+    candidate.hash !== "" ||
+    !candidate.hostname.endsWith(".zerops.app") ||
+    candidate.hostname.split(".").length < 4 ||
+    !firstLabel?.startsWith(`${workspaceHostname}-`) ||
+    !firstLabel.endsWith(`-${bridgePort}`)
+  ) {
+    throw new Error("Zerops workspace service returned an invalid generated subdomain URL.");
+  }
+  return candidate.origin;
+}
+
+async function readApiResponseBody(response: Response, method: string, path: string): Promise<unknown> {
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    const bytes = Number(declaredLength);
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > maximumApiResponseBytes) {
+      throw new Error(`Zerops API ${method} ${path} returned an invalid or oversized response.`);
+    }
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > maximumApiResponseBytes) {
+    throw new Error(`Zerops API ${method} ${path} returned an oversized response.`);
+  }
+  if (bytes.byteLength === 0) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(bytes).toString("utf8"));
+    return parsed;
+  } catch {
+    throw new Error(`Zerops API ${method} ${path} returned invalid JSON.`);
+  }
 }
 
 function defaultSleep(milliseconds: number, signal: AbortSignal): Promise<void> {
@@ -388,30 +447,25 @@ export class ZeropsWorkspacePlatformClient {
 
     const project = await this.#getOwnedProject(identity.projectId, description, operationSignal);
     if (!project) throw new Error("The persisted Zerops Codex workspace project is absent.");
-    const service = serviceSchema.parse(
-      (
-        await this.#request(
-          `/service-stack/${encodeURIComponent(identity.serviceId)}`,
-          "GET",
-          operationSignal,
-        )
-      ).body,
-    );
-    if (
-      service.id !== identity.serviceId ||
-      service.projectId !== identity.projectId ||
-      service.name !== workspaceHostname ||
-      !service.subdomainAccess
-    ) {
-      throw new Error("The persisted Zerops Codex workspace service identity is invalid.");
-    }
+    await this.#getWorkspaceService(identity, operationSignal);
     await this.#sourcePusher.push({
       projectId: identity.projectId,
       serviceId: identity.serviceId,
       sourceDirectory,
       signal: operationSignal,
     });
-    const bridgeUrl = bridgeUrlFromProject(project);
+    const enableProcess = processSchema.parse(
+      (
+        await this.#request(
+          `/service-stack/${encodeURIComponent(identity.serviceId)}/enable-subdomain-access`,
+          "PUT",
+          operationSignal,
+        )
+      ).body,
+    );
+    await this.#waitForProcess(enableProcess.id, identity, operationSignal);
+    const publicService = await this.#waitForSubdomainAccess(identity, operationSignal);
+    const bridgeUrl = bridgeUrlFromService(publicService);
     await this.#waitForHealth(bridgeUrl, operationSignal);
     return { ...identity, bridgeUrl };
   }
@@ -435,7 +489,7 @@ export class ZeropsWorkspacePlatformClient {
           "DELETE",
           operationSignal,
         );
-        if (deletion.status !== 404) {
+        if (!isZeropsProjectAbsentResponse(deletion.status, deletion.body)) {
           const process = processSchema.parse(deletion.body);
           await this.#waitForProcess(process.id, { projectId, serviceId: "deletion" }, operationSignal);
         }
@@ -454,7 +508,7 @@ export class ZeropsWorkspacePlatformClient {
 
   async #request(
     path: string,
-    method: "GET" | "POST" | "DELETE",
+    method: "GET" | "POST" | "PUT" | "DELETE",
     signal: AbortSignal,
     body?: object,
   ): Promise<ApiResponse> {
@@ -469,17 +523,11 @@ export class ZeropsWorkspacePlatformClient {
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.#requestTimeoutMs)]),
     });
-    if (response.status === 404) return { status: 404, body: null };
-    if (!response.ok) {
+    const parsedBody = await readApiResponseBody(response, method, path);
+    if (!response.ok && !isZeropsProjectAbsentResponse(response.status, parsedBody)) {
       throw new Error(`Zerops API ${method} ${path} returned HTTP ${response.status}.`);
     }
-    const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > 1_000_000) {
-      throw new Error(`Zerops API ${method} ${path} returned an oversized response.`);
-    }
-    if (!text) return { status: response.status, body: {} };
-    const parsed: unknown = JSON.parse(text);
-    return { status: response.status, body: parsed };
+    return { status: response.status, body: parsedBody };
   }
 
   async #getOwnedProject(
@@ -492,7 +540,7 @@ export class ZeropsWorkspacePlatformClient {
       "GET",
       signal,
     );
-    if (response.status === 404) return null;
+    if (isZeropsProjectAbsentResponse(response.status, response.body)) return null;
     const project = projectSchema.parse(response.body);
     if (
       project.id !== projectId ||
@@ -503,6 +551,40 @@ export class ZeropsWorkspacePlatformClient {
       throw new Error("Zerops Codex workspace ownership does not match; the operation was refused.");
     }
     return project;
+  }
+
+  async #getWorkspaceService(
+    identity: PersistedWorkspaceIdentity,
+    signal: AbortSignal,
+  ): Promise<z.infer<typeof serviceSchema>> {
+    const service = serviceSchema.parse(
+      (
+        await this.#request(
+          `/service-stack/${encodeURIComponent(identity.serviceId)}`,
+          "GET",
+          signal,
+        )
+      ).body,
+    );
+    if (
+      service.id !== identity.serviceId ||
+      service.projectId !== identity.projectId ||
+      service.name !== workspaceHostname
+    ) {
+      throw new Error("The persisted Zerops Codex workspace service identity is invalid.");
+    }
+    return service;
+  }
+
+  async #waitForSubdomainAccess(
+    identity: PersistedWorkspaceIdentity,
+    signal: AbortSignal,
+  ): Promise<z.infer<typeof serviceSchema>> {
+    while (true) {
+      const service = await this.#getWorkspaceService(identity, signal);
+      if (service.subdomainAccess) return service;
+      await this.#sleep(this.#pollIntervalMs, signal);
+    }
   }
 
   async #waitForProcess(
@@ -552,7 +634,7 @@ export class ZeropsWorkspacePlatformClient {
 }
 
 export const workspacePlatformInternals = {
-  bridgeUrlFromProject,
+  bridgeUrlFromService,
   ownershipDescription,
   workspaceTags,
 } as const;

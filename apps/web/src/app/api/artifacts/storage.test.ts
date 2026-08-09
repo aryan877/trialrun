@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import {
   artifactResponseHeaders,
   openLocalArtifact,
   parseArtifactRange,
+  readVerifiedArtifactBytes,
   s3ObjectUrl,
   signedS3GetHeaders,
   validateArtifactStorageKey,
@@ -74,6 +76,25 @@ describe("artifact storage boundaries", () => {
     expect(() => parseArtifactRange(null, Number.MAX_SAFE_INTEGER + 1)).toThrow(
       ArtifactStorageError,
     );
+  });
+
+  it("accepts only bytes matching the durable size and SHA-256", async () => {
+    const value = "real recorded proof";
+    const digest = createHash("sha256").update(value).digest("hex");
+    const body = () => new Response(value).body!;
+
+    await expect(readVerifiedArtifactBytes(body(), value.length, digest, 1_024)).resolves.toEqual(
+      Buffer.from(value),
+    );
+    await expect(
+      readVerifiedArtifactBytes(body(), value.length, "0".repeat(64), 1_024),
+    ).rejects.toBeInstanceOf(ArtifactStorageError);
+    await expect(
+      readVerifiedArtifactBytes(body(), value.length - 1, digest, 1_024),
+    ).rejects.toBeInstanceOf(ArtifactStorageError);
+    await expect(
+      readVerifiedArtifactBytes(body(), value.length, digest, value.length - 1),
+    ).rejects.toBeInstanceOf(ArtifactStorageError);
   });
 
   it("streams a local range only when the canonical file remains inside the root", async () => {

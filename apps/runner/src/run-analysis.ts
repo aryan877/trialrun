@@ -4,25 +4,16 @@ import {
   type RepositoryRecipe,
   type TrialRunDatabase,
 } from "@trialrun/db";
-import {
-  CodexCliInfrastructureAnalyst,
-  stageGitHubCommit,
-} from "@trialrun/executor";
-import {
-  randomToken,
-  type EvidenceCitation,
-  type InfrastructureProposal,
-} from "@trialrun/domain";
+import { stageGitHubCommit } from "@trialrun/executor";
+import { CodexCliInfrastructureAnalyst } from "@trialrun/agent-runtime";
+import { randomToken, type EvidenceCitation, type InfrastructureProposal } from "@trialrun/domain";
 
 import { runnerConfig } from "./config";
 import { loadAgentAccess, workspaceBridgeClient } from "./agent-access.js";
+import { stageGitHubSourceWithFreshToken } from "./github-source-staging";
 import { startRepositoryAnalysisMcpServer } from "./repository-mcp.js";
 import { createSingleRepositoryView, type RepositoryView } from "./repository-view.js";
-import {
-  githubService,
-  remoteRepositoryMcpNetwork,
-  repositoryMcpUrl,
-} from "./services";
+import { githubService, remoteRepositoryMcpNetwork, repositoryMcpUrl } from "./services";
 
 function proposalCitations(proposal: InfrastructureProposal): readonly EvidenceCitation[] {
   return [
@@ -44,7 +35,9 @@ async function verifyProposalCitations(
   }
   for (const citation of unique.values()) {
     if (citation.lineStart === undefined || citation.lineEnd === undefined) {
-      throw new Error(`Infrastructure proposal citation ${citation.path} needs exact line numbers.`);
+      throw new Error(
+        `Infrastructure proposal citation ${citation.path} needs exact line numbers.`,
+      );
     }
     const range = await view.readFile({
       side: "head",
@@ -73,15 +66,22 @@ export async function runRepositoryAnalysis(
     connectionId: claimed.job.agentConnectionId,
   });
   const github = githubService();
-  const { token } = await github.getInstallationToken(
-    claimed.installation.githubInstallationId,
-    claimed.repository.githubRepositoryId,
-  );
-  const staged = await stageGitHubCommit({
-    owner: claimed.repository.owner,
-    repository: claimed.repository.name,
-    installationToken: token,
-    sha: claimed.job.sourceSha,
+  const staged = await stageGitHubSourceWithFreshToken({
+    issueToken: () =>
+      github
+        .getInstallationToken(
+          claimed.installation.githubInstallationId,
+          claimed.repository.githubRepositoryId,
+        )
+        .then(({ token }) => token),
+    stage: (installationToken) =>
+      stageGitHubCommit({
+        owner: claimed.repository.owner,
+        repository: claimed.repository.name,
+        installationToken,
+        sha: claimed.job.sourceSha,
+      }),
+    ...(signal ? { signal } : {}),
   });
   let repositoryTools: Awaited<ReturnType<typeof startRepositoryAnalysisMcpServer>> | null = null;
   try {
@@ -90,14 +90,9 @@ export async function runRepositoryAnalysis(
     repositoryTools = await startRepositoryAnalysisMcpServer({
       view,
       executionToken: repositoryToken,
-      ...(agentAccess.mode === "codex_workspace"
-        ? { network: remoteRepositoryMcpNetwork() }
-        : {}),
+      ...(agentAccess.mode === "codex_workspace" ? { network: remoteRepositoryMcpNetwork() } : {}),
     });
-    const mcpUrl = repositoryMcpUrl(
-      repositoryTools,
-      agentAccess.mode === "codex_workspace",
-    );
+    const mcpUrl = repositoryMcpUrl(repositoryTools, agentAccess.mode === "codex_workspace");
     const proposal =
       agentAccess.mode === "codex_workspace"
         ? await workspaceBridgeClient(agentAccess)

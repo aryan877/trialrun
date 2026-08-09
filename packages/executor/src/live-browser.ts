@@ -5,10 +5,19 @@ import { join } from "node:path";
 
 import {
   redactText,
-  testStepSchema,
+  testAssertionSchema,
+  testInputValueSchema,
+  testLocatorSchema,
+  testNavigationWaitUntilSchema,
+  testPressKeySchema,
+  testSelectOptionSchema,
   type BrowserEvent,
+  type TestAssertion,
+  type TestInputValue,
   type TestLocator,
-  type TestStep,
+  type TestNavigationWaitUntil,
+  type TestPressKey,
+  type TestSelectOption,
 } from "@trialrun/domain";
 import {
   chromium,
@@ -18,14 +27,27 @@ import {
   type Page,
   type Video,
 } from "playwright";
+import { z } from "zod";
 
+import {
+  LiveApiContractError,
+  evaluateLiveApiAssertion,
+  liveApiAssertionSchema,
+  liveApiRequestSchema,
+  redactLiveApiText,
+  resolveLiveApiRequest,
+  type LiveApiAssertion,
+  type LiveApiRequest,
+  type ResolvedLiveApiRequest,
+} from "./live-api";
+import { maximumLiveBrowserRecordingArtifactBytes } from "./live-protocol";
 import type { ReviewSide } from "./types";
 
-export type LiveFillValue = Extract<TestStep, { action: "fill" }>["value"];
-export type LiveSelectOption = Extract<TestStep, { action: "select" }>["option"];
-export type LivePressKey = Extract<TestStep, { action: "press" }>["key"];
-export type LiveAssertion = Extract<TestStep, { action: "assert" }>["assertion"];
-export type LiveNavigationWaitUntil = Extract<TestStep, { action: "goto" }>["waitUntil"];
+export type LiveFillValue = TestInputValue;
+export type LiveSelectOption = TestSelectOption;
+export type LivePressKey = TestPressKey;
+export type LiveAssertion = TestAssertion;
+export type LiveNavigationWaitUntil = TestNavigationWaitUntil;
 
 export type LiveBrowserErrorCode =
   | "ACTION_BUDGET_EXHAUSTED"
@@ -59,6 +81,7 @@ export interface LiveBrowserBudgets {
   readonly toolTimeoutMs: number;
   readonly maxSnapshotBytes: number;
   readonly maxEventsPerRead: number;
+  readonly maxApiResponseBytes: number;
   readonly maxArtifactBytes: number;
   readonly maxTotalArtifactBytes: number;
 }
@@ -71,6 +94,7 @@ const defaultBudgets: LiveBrowserBudgets = {
   toolTimeoutMs: 30_000,
   maxSnapshotBytes: 64 * 1_024,
   maxEventsPerRead: 100,
+  maxApiResponseBytes: 256 * 1_024,
   maxArtifactBytes: 128 * 1_024 * 1_024,
   maxTotalArtifactBytes: 384 * 1_024 * 1_024,
 };
@@ -79,8 +103,6 @@ const maximumStoredBrowserEvents = 10_000;
 
 // A side recording is optional evidence, not an unbounded session archive. This keeps
 // one 15-minute review from exhausting executor memory before durable persistence.
-export const maximumLiveBrowserRecordingArtifactBytes = 64 * 1_024 * 1_024;
-
 export interface LiveBrowserRawEvent {
   readonly kind: BrowserEvent["kind"];
   readonly level: BrowserEvent["level"];
@@ -102,6 +124,11 @@ export interface LiveBrowserSideController {
   press(locator: TestLocator, key: LivePressKey, signal: AbortSignal): Promise<void>;
   isVisible(locator: TestLocator, signal: AbortSignal): Promise<boolean>;
   textContent(locator: TestLocator, signal: AbortSignal): Promise<string>;
+  apiRequest(
+    request: ResolvedLiveApiRequest,
+    maximumResponseBytes: number,
+    signal: AbortSignal,
+  ): Promise<LiveApiRawResponse>;
   screenshot(signal: AbortSignal): Promise<Uint8Array>;
   finishRecording(capture: boolean, maximumBytes: number): Promise<Uint8Array | undefined>;
   close(): Promise<void>;
@@ -156,11 +183,37 @@ export interface LiveAssertionRecord {
   readonly side: ReviewSide;
   readonly stateVersion: number;
   readonly path: string;
-  readonly kind: LiveAssertion["kind"];
+  readonly kind: LiveAssertion["kind"] | "api_status" | "api_text" | "api_json";
   readonly locatorFingerprint: string;
+  readonly sourceResponseId?: string | undefined;
   readonly passed: boolean;
   readonly expected: string;
   readonly actual: string;
+  readonly createdAt: string;
+}
+
+export interface LiveApiRawResponse {
+  readonly status: number;
+  readonly contentType?: string | undefined;
+  readonly body: Uint8Array;
+  readonly bodyTruncated: boolean;
+}
+
+export interface LiveApiResponseRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly sequence: number;
+  readonly side: ReviewSide;
+  readonly stateVersion: number;
+  readonly method: LiveApiRequest["method"];
+  readonly path: string;
+  readonly requestFingerprint: string;
+  readonly status: number;
+  readonly contentType?: string | undefined;
+  readonly bodySha256: string;
+  readonly bodyPreview: string;
+  readonly bodyTruncated: boolean;
+  readonly capturedByteSize: number;
   readonly createdAt: string;
 }
 
@@ -200,8 +253,12 @@ export interface LiveBrowserEventsResult {
 }
 
 export type LiveToolName =
+  | "api_assert"
+  | "api_request"
+  | "api_request_pair"
   | "browser_assert"
   | "browser_checkpoint"
+  | "browser_checkpoint_pair"
   | "browser_click"
   | "browser_count"
   | "browser_events"
@@ -246,6 +303,7 @@ export interface LiveBrowserEvidence {
   readonly observations: readonly Omit<LiveBrowserObservation, "snapshot">[];
   readonly assertions: readonly LiveAssertionRecord[];
   readonly matchedAssertionNames: readonly string[];
+  readonly apiResponses: readonly LiveApiResponseRecord[];
   readonly checkpoints: readonly LiveCheckpointRecord[];
   readonly matchedCheckpointNames: readonly string[];
   readonly recordings: readonly LiveRecordingArtifactRecord[];
@@ -270,35 +328,70 @@ interface StoredArtifact {
   readonly bytes: Uint8Array;
 }
 
+interface PendingCheckpoint {
+  readonly name: string;
+  readonly side: ReviewSide;
+  readonly stateVersion: number;
+  readonly path: string;
+  readonly captured: boolean;
+  readonly bytes?: Uint8Array;
+  readonly digest?: string;
+}
+
+interface PendingApiResponse {
+  readonly name: string;
+  readonly side: ReviewSide;
+  readonly stateVersion: number;
+  readonly method: LiveApiRequest["method"];
+  readonly path: string;
+  readonly requestFingerprint: string;
+  readonly status: number;
+  readonly contentType?: string | undefined;
+  readonly bodySha256: string;
+  readonly bodyPreview: string;
+  readonly bodyTruncated: boolean;
+  readonly capturedByteSize: number;
+  readonly assertionBodyText: string;
+}
+
+type PendingBrowserAssertion = Omit<LiveAssertionRecord, "id" | "sequence" | "createdAt">;
+
 interface ToolContext {
   readonly signal: AbortSignal;
   readonly startedAt: string;
   readonly evidenceSequence: number;
 }
 
-type GotoStep = Extract<TestStep, { action: "goto" }>;
-type ClickStep = Extract<TestStep, { action: "click" }>;
-type FillStep = Extract<TestStep, { action: "fill" }>;
-type SelectStep = Extract<TestStep, { action: "select" }>;
-type PressStep = Extract<TestStep, { action: "press" }>;
-type AssertStep = Extract<TestStep, { action: "assert" }>;
-type CheckpointStep = Extract<TestStep, { action: "checkpoint" }>;
-type LiveStepAction = Exclude<TestStep["action"], "request">;
+const navigationInputSchema = z.strictObject({
+  path: z
+    .string()
+    .regex(/^\/(?!\/).*/)
+    .max(2_000),
+  waitUntil: testNavigationWaitUntilSchema,
+});
+const fillInputSchema = z.strictObject({
+  locator: testLocatorSchema,
+  value: testInputValueSchema,
+});
+const selectInputSchema = z.strictObject({
+  locator: testLocatorSchema,
+  option: testSelectOptionSchema,
+});
+const pressInputSchema = z.strictObject({
+  locator: testLocatorSchema,
+  key: testPressKeySchema,
+});
+const evidenceNameSchema = z
+  .string()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  .max(80);
 
-function parseStep(candidate: unknown, action: "goto"): GotoStep;
-function parseStep(candidate: unknown, action: "click"): ClickStep;
-function parseStep(candidate: unknown, action: "fill"): FillStep;
-function parseStep(candidate: unknown, action: "select"): SelectStep;
-function parseStep(candidate: unknown, action: "press"): PressStep;
-function parseStep(candidate: unknown, action: "assert"): AssertStep;
-function parseStep(candidate: unknown, action: "checkpoint"): CheckpointStep;
-function parseStep(
-  candidate: unknown,
-  action: LiveStepAction,
-): Exclude<TestStep, { action: "request" }> {
-  const parsed = testStepSchema.safeParse(candidate);
-  if (!parsed.success || parsed.data.action === "request" || parsed.data.action !== action) {
-    throw new LiveBrowserError("INVALID_INPUT", `Invalid ${action} input.`);
+function parseLiveInput<T>(schema: z.ZodType<T>, candidate: unknown, label: string): T {
+  const parsed = schema.safeParse(candidate);
+  if (!parsed.success) {
+    throw new LiveBrowserError("INVALID_INPUT", `Invalid ${label} input.`, {
+      cause: parsed.error,
+    });
   }
   return parsed.data;
 }
@@ -478,6 +571,68 @@ class PlaywrightSideController implements LiveBrowserSideController {
     });
   }
 
+  async apiRequest(
+    request: ResolvedLiveApiRequest,
+    maximumResponseBytes: number,
+    signal: AbortSignal,
+  ): Promise<LiveApiRawResponse> {
+    return this.#run(signal, async () => {
+      this.#assertSameOrigin();
+      const target = new URL(request.path, `${this.#origin}/`);
+      if (target.origin !== this.#origin) {
+        throw new LiveBrowserError(
+          "SAME_ORIGIN_REQUIRED",
+          "API request escaped the assigned application origin.",
+        );
+      }
+      const headers = new Headers(request.headers);
+      const cookies = await this.#context.cookies(target.href);
+      if (cookies.length > 0) {
+        headers.set("Cookie", cookies.map(({ name, value }) => `${name}=${value}`).join("; "));
+      }
+      const response = await fetch(target, {
+        method: request.method,
+        headers,
+        ...(request.body === undefined ? {} : { body: request.body }),
+        redirect: "manual",
+        signal,
+      });
+      const chunks: Uint8Array[] = [];
+      let capturedByteSize = 0;
+      let bodyTruncated = false;
+      const reader = response.body?.getReader();
+      if (reader) {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          const remaining = maximumResponseBytes - capturedByteSize;
+          if (remaining <= 0) {
+            bodyTruncated = true;
+            await reader.cancel();
+            break;
+          }
+          if (next.value.byteLength > remaining) {
+            chunks.push(next.value.subarray(0, remaining));
+            capturedByteSize += remaining;
+            bodyTruncated = true;
+            await reader.cancel();
+            break;
+          }
+          chunks.push(next.value);
+          capturedByteSize += next.value.byteLength;
+        }
+      }
+      return {
+        status: response.status,
+        ...(response.headers.get("content-type")
+          ? { contentType: response.headers.get("content-type") ?? undefined }
+          : {}),
+        body: Uint8Array.from(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))),
+        bodyTruncated,
+      };
+    });
+  }
+
   async screenshot(signal: AbortSignal): Promise<Uint8Array> {
     return this.#run(signal, () =>
       this.#page.screenshot({ animations: "disabled", fullPage: false, type: "png" }),
@@ -594,7 +749,7 @@ class PlaywrightLiveBrowserRuntime implements LiveBrowserRuntime {
         colorScheme: "dark",
         reducedMotion: "reduce",
         serviceWorkers: "block",
-        recordVideo: { dir: recordingDirectory },
+        recordVideo: { dir: recordingDirectory, size: { width: 720, height: 450 } },
       });
       const page = await context.newPage();
       const video = page.video();
@@ -684,6 +839,8 @@ export class LiveBrowserSession {
   readonly #ledger: LiveEvidenceEntry[] = [];
   readonly #observations: Array<Omit<LiveBrowserObservation, "snapshot">> = [];
   readonly #assertions: LiveAssertionRecord[] = [];
+  readonly #apiResponses: LiveApiResponseRecord[] = [];
+  readonly #apiResponseBodies = new Map<string, string>();
   readonly #checkpoints: LiveCheckpointRecord[] = [];
   readonly #recordings: LiveRecordingArtifactRecord[] = [];
   readonly #events: LiveBrowserEvent[] = [];
@@ -693,6 +850,7 @@ export class LiveBrowserSession {
   #resetsUsed = 0;
   #evidenceSequence = 0;
   #assertionSequence = 0;
+  #apiResponseSequence = 0;
   #eventSequence = 0;
   #lastTimestampMs = 0;
   #totalArtifactBytes = 0;
@@ -811,6 +969,7 @@ export class LiveBrowserSession {
       observations: this.#observations.map((observation) => ({ ...observation })),
       assertions: this.#assertions.map((assertion) => ({ ...assertion })),
       matchedAssertionNames,
+      apiResponses: this.#apiResponses.map((response) => ({ ...response })),
       checkpoints: this.#checkpoints.map((checkpoint) => ({ ...checkpoint })),
       matchedCheckpointNames,
       recordings: this.#recordings.map((recording) => ({ ...recording })),
@@ -874,26 +1033,27 @@ export class LiveBrowserSession {
     readonly waitUntil?: LiveNavigationWaitUntil;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const step = parseStep(
-      { action: "goto", path: input.path, waitUntil: input.waitUntil ?? "domcontentloaded" },
-      "goto",
+    const navigation = parseLiveInput(
+      navigationInputSchema,
+      { path: input.path, waitUntil: input.waitUntil ?? "domcontentloaded" },
+      "navigation",
     );
     return this.#tool(
       "browser_navigate",
       input.side,
-      { path: this.#redact(step.path), waitUntil: step.waitUntil },
+      { path: this.#redact(navigation.path), waitUntil: navigation.waitUntil },
       input.signal,
       async ({ signal }) => {
-        this.#rejectSecretBearingPath(step.path);
+        this.#rejectSecretBearingPath(navigation.path);
         const state = this.#invalidate(input.side);
-        const target = new URL(step.path, `${this.#origins[input.side]}/`);
+        const target = new URL(navigation.path, `${this.#origins[input.side]}/`);
         if (target.origin !== this.#origins[input.side]) {
           throw new LiveBrowserError(
             "SAME_ORIGIN_REQUIRED",
             "Navigation must remain on the assigned origin.",
           );
         }
-        await state.controller.navigate(target.href, step.waitUntil, signal);
+        await state.controller.navigate(target.href, navigation.waitUntil, signal);
         const path = this.#safeCurrentPath(input.side, state.controller);
         return {
           value: { side: input.side, stateVersion: state.version, path },
@@ -910,7 +1070,7 @@ export class LiveBrowserSession {
     readonly locator: TestLocator;
     readonly signal?: AbortSignal;
   }): Promise<LiveCountResult> {
-    const locator = parseStep({ action: "click", target: input.locator }, "click").target;
+    const locator = parseLiveInput(testLocatorSchema, input.locator, "locator");
     return this.#tool(
       "browser_count",
       input.side,
@@ -935,7 +1095,7 @@ export class LiveBrowserSession {
     readonly locator: TestLocator;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const locator = parseStep({ action: "click", target: input.locator }, "click").target;
+    const locator = parseLiveInput(testLocatorSchema, input.locator, "locator");
     return this.#interaction(
       "browser_click",
       input.side,
@@ -954,36 +1114,40 @@ export class LiveBrowserSession {
     readonly value: LiveFillValue;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const step = parseStep({ action: "fill", target: input.locator, value: input.value }, "fill");
+    const fill = parseLiveInput(
+      fillInputSchema,
+      { locator: input.locator, value: input.value },
+      "fill",
+    );
     const result = await this.#interaction(
       "browser_fill",
       input.side,
       input.observationId,
-      step.target,
+      fill.locator,
       {
         observationId: input.observationId,
-        locator: this.#locatorSummary(step.target),
+        locator: this.#locatorSummary(fill.locator),
         value:
-          step.value.kind === "secret"
-            ? { kind: "secret", name: step.value.name }
-            : { kind: "literal", length: step.value.value.length },
+          fill.value.kind === "secret"
+            ? { kind: "secret", name: fill.value.name }
+            : { kind: "literal", length: fill.value.value.length },
       },
       input.signal,
       async (controller, signal) => {
         const suppliedValue =
-          step.value.kind === "literal" ? step.value.value : this.#secrets[step.value.name];
+          fill.value.kind === "literal" ? fill.value.value : this.#secrets[fill.value.name];
         if (suppliedValue === undefined) {
           throw new LiveBrowserError(
             "SECRET_NOT_APPROVED",
             "Requested secret name is not approved.",
           );
         }
-        if (step.value.kind === "secret") {
+        if (fill.value.kind === "secret") {
           const state = this.#side(input.side);
           state.secretTainted = true;
           state.recordingSecretTainted = true;
         }
-        await controller.fill(step.target, suppliedValue, signal);
+        await controller.fill(fill.locator, suppliedValue, signal);
       },
     );
     return result;
@@ -996,23 +1160,24 @@ export class LiveBrowserSession {
     readonly option: LiveSelectOption;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const step = parseStep(
-      { action: "select", target: input.locator, option: input.option },
+    const select = parseLiveInput(
+      selectInputSchema,
+      { locator: input.locator, option: input.option },
       "select",
     );
     return this.#interaction(
       "browser_select",
       input.side,
       input.observationId,
-      step.target,
+      select.locator,
       {
         observationId: input.observationId,
-        locator: this.#locatorSummary(step.target),
-        option: step.option,
+        locator: this.#locatorSummary(select.locator),
+        option: select.option,
       },
       input.signal,
       async (controller, signal) => {
-        await controller.select(step.target, step.option, signal);
+        await controller.select(select.locator, select.option, signal);
       },
     );
   }
@@ -1024,19 +1189,23 @@ export class LiveBrowserSession {
     readonly key: LivePressKey;
     readonly signal?: AbortSignal;
   }): Promise<LiveActionResult> {
-    const step = parseStep({ action: "press", target: input.locator, key: input.key }, "press");
+    const press = parseLiveInput(
+      pressInputSchema,
+      { locator: input.locator, key: input.key },
+      "press",
+    );
     return this.#interaction(
       "browser_press",
       input.side,
       input.observationId,
-      step.target,
+      press.locator,
       {
         observationId: input.observationId,
-        locator: this.#locatorSummary(step.target),
-        key: step.key,
+        locator: this.#locatorSummary(press.locator),
+        key: press.key,
       },
       input.signal,
-      (controller, signal) => controller.press(step.target, step.key, signal),
+      (controller, signal) => controller.press(press.locator, press.key, signal),
     );
   }
 
@@ -1046,18 +1215,109 @@ export class LiveBrowserSession {
     readonly assertion: LiveAssertion;
     readonly signal?: AbortSignal;
   }): Promise<LiveAssertionRecord> {
-    const expected = parseStep(
-      { action: "assert", assertion: input.assertion },
-      "assert",
-    ).assertion;
-    const name = parseStep({ action: "checkpoint", name: input.name }, "checkpoint").name;
+    const expected = parseLiveInput(testAssertionSchema, input.assertion, "assertion");
+    const name = parseLiveInput(evidenceNameSchema, input.name, "evidence name");
     return this.#tool(
       "browser_assert",
       input.side,
       { name, assertion: this.#assertionSummary(expected) },
       input.signal,
       async ({ signal }) => {
-        const state = this.#side(input.side);
+        const assertion = this.#commitBrowserAssertion(
+          await this.#prepareBrowserAssertion(input.side, name, expected, signal),
+        );
+        return {
+          value: assertion,
+          result: `assertion ${assertion.id} ${assertion.passed ? "passed" : "failed"}`,
+          stateVersion: assertion.stateVersion,
+        };
+      },
+    );
+  }
+
+  async apiRequest(input: {
+    readonly side: ReviewSide;
+    readonly name: string;
+    readonly request: LiveApiRequest;
+    readonly signal?: AbortSignal;
+  }): Promise<LiveApiResponseRecord> {
+    const name = parseLiveInput(evidenceNameSchema, input.name, "evidence name");
+    const request = this.#parseApiRequest(input.request);
+    const resolved = this.#resolveApiRequest(request);
+    this.#rejectSecretBearingPath(request.path);
+    return this.#tool(
+      "api_request",
+      input.side,
+      { name, request: this.#apiRequestSummary(resolved) },
+      input.signal,
+      async ({ signal }) => {
+        this.#requireApiResponseName(input.side, name);
+        const pending = await this.#prepareApiResponse(input.side, name, request, resolved, signal);
+        const response = this.#commitApiResponse(pending);
+        return {
+          value: response,
+          result: `API response ${response.id}: HTTP ${response.status}; sha256=${response.bodySha256}; ${response.capturedByteSize} redacted bytes${response.bodyTruncated ? "; truncated" : ""}`,
+          stateVersion: response.stateVersion,
+        };
+      },
+    );
+  }
+
+  async apiRequestPair(input: {
+    readonly name: string;
+    readonly request: LiveApiRequest;
+    readonly signal?: AbortSignal;
+  }): Promise<{ readonly base: LiveApiResponseRecord; readonly head: LiveApiResponseRecord }> {
+    const name = parseLiveInput(evidenceNameSchema, input.name, "evidence name");
+    const request = this.#parseApiRequest(input.request);
+    const resolved = this.#resolveApiRequest(request);
+    this.#rejectSecretBearingPath(request.path);
+    return this.#tool(
+      "api_request_pair",
+      undefined,
+      { name, request: this.#apiRequestSummary(resolved) },
+      input.signal,
+      async ({ signal }) => {
+        this.#requireApiResponseName("base", name);
+        this.#requireApiResponseName("head", name);
+        const [basePending, headPending] = await Promise.all([
+          this.#prepareApiResponse("base", name, request, resolved, signal),
+          this.#prepareApiResponse("head", name, request, resolved, signal),
+        ]);
+        const base = this.#commitApiResponse(basePending);
+        const head = this.#commitApiResponse(headPending);
+        return {
+          value: { base, head },
+          result: `paired API responses ${base.id} and ${head.id}: HTTP ${base.status}/${head.status}`,
+        };
+      },
+    );
+  }
+
+  async apiAssert(input: {
+    readonly side: ReviewSide;
+    readonly name: string;
+    readonly responseId: string;
+    readonly assertion: LiveApiAssertion;
+    readonly signal?: AbortSignal;
+  }): Promise<LiveAssertionRecord> {
+    const name = parseLiveInput(evidenceNameSchema, input.name, "evidence name");
+    const parsed = liveApiAssertionSchema.safeParse(input.assertion);
+    if (!parsed.success) {
+      throw new LiveBrowserError("INVALID_INPUT", "Live API assertion is invalid.", {
+        cause: parsed.error,
+      });
+    }
+    return this.#tool(
+      "api_assert",
+      input.side,
+      {
+        name,
+        responseId: input.responseId,
+        assertion: this.#apiAssertionSummary(parsed.data),
+      },
+      input.signal,
+      () => {
         if (
           this.#assertions.some(
             (assertion) => assertion.side === input.side && assertion.name === name,
@@ -1068,69 +1328,62 @@ export class LiveBrowserSession {
             `Assertion name ${name} is already recorded for ${input.side}.`,
           );
         }
-        const path = this.#safeCurrentPath(input.side, state.controller);
-        let passed: boolean;
-        let expectedText: string;
-        let actualText: string;
-        if (expected.kind === "url") {
-          passed = path.includes(expected.includes);
-          expectedText = `path containing ${expected.includes}`;
-          actualText = path;
-        } else {
-          const count = await state.controller.count(expected.target, signal);
-          if (expected.kind === "visible" || expected.kind === "hidden") {
-            if (count > 1) {
-              throw new LiveBrowserError(
-                "LOCATOR_NOT_UNIQUE",
-                `Assertion locator resolved to ${count} elements; at most one is allowed.`,
-              );
-            }
-            const visible =
-              count === 1 && (await state.controller.isVisible(expected.target, signal));
-            const desired = expected.kind === "visible";
-            passed = visible === desired;
-            expectedText = desired ? "visible" : "hidden";
-            actualText = visible ? "visible" : "hidden";
-          } else {
-            if (count !== 1) {
-              throw new LiveBrowserError(
-                "LOCATOR_NOT_UNIQUE",
-                `Assertion locator resolved to ${count} elements; exactly one is required.`,
-              );
-            }
-            const text = await state.controller.textContent(expected.target, signal);
-            passed = text.includes(expected.includes);
-            expectedText = `text containing ${expected.includes}`;
-            actualText = text;
-          }
+        const response = this.#apiResponses.find(
+          (candidate) => candidate.id === input.responseId && candidate.side === input.side,
+        );
+        const responseBody = response ? this.#apiResponseBodies.get(response.id) : undefined;
+        if (!response || responseBody === undefined) {
+          throw new LiveBrowserError(
+            "INVALID_INPUT",
+            "API response ID is missing or belongs to the other review side.",
+          );
         }
-        const redactedActual = this.#redact(actualText);
-        if (redactedActual !== actualText) {
-          state.secretTainted = true;
-          state.recordingSecretTainted = true;
+        let evaluation;
+        try {
+          evaluation = evaluateLiveApiAssertion(
+            {
+              status: response.status,
+              bodyText: responseBody,
+              bodyTruncated: response.bodyTruncated,
+              ...(response.contentType === undefined ? {} : { contentType: response.contentType }),
+            },
+            parsed.data,
+          );
+        } catch (error) {
+          throw this.#normalizeApiError(error);
         }
+        const kind =
+          parsed.data.kind === "status"
+            ? "api_status"
+            : parsed.data.kind === "body_includes"
+              ? "api_text"
+              : "api_json";
         const assertion: LiveAssertionRecord = {
           id: this.#opaqueId("assert"),
           name,
           sequence: ++this.#assertionSequence,
           side: input.side,
-          stateVersion: state.version,
-          path,
-          kind: expected.kind,
+          stateVersion: response.stateVersion,
+          path: response.path,
+          kind,
           locatorFingerprint: sha256(
-            JSON.stringify(expected.kind === "url" ? { kind: "url" } : expected.target),
+            JSON.stringify({
+              requestFingerprint: response.requestFingerprint,
+              assertion: evaluation.fingerprintInput,
+            }),
           ),
-          passed,
-          expected: boundedUtf8(this.#redact(expectedText), 1_000).value,
-          actual: boundedUtf8(redactedActual, 2_000).value,
+          sourceResponseId: response.id,
+          passed: evaluation.passed,
+          expected: boundedUtf8(this.#redact(evaluation.expected), 1_000).value,
+          actual: boundedUtf8(this.#redact(evaluation.actual), 2_000).value,
           createdAt: this.#timestamp(),
         };
         this.#assertions.push(assertion);
-        return {
+        return Promise.resolve({
           value: assertion,
-          result: `assertion ${assertion.id} ${passed ? "passed" : "failed"}`,
-          stateVersion: state.version,
-        };
+          result: `API assertion ${assertion.id} ${assertion.passed ? "passed" : "failed"}`,
+          stateVersion: response.stateVersion,
+        });
       },
     );
   }
@@ -1140,76 +1393,71 @@ export class LiveBrowserSession {
     readonly name: string;
     readonly signal?: AbortSignal;
   }): Promise<LiveCheckpointRecord> {
-    const name = parseStep({ action: "checkpoint", name: input.name }, "checkpoint").name;
+    const name = parseLiveInput(evidenceNameSchema, input.name, "evidence name");
     return this.#tool(
       "browser_checkpoint",
       input.side,
       { name },
       input.signal,
       async ({ signal }) => {
-        const state = this.#side(input.side);
-        const path = this.#safeCurrentPath(input.side, state.controller);
-        if (this.#checkpoints.length >= this.#budgets.maxCheckpoints) {
-          throw new LiveBrowserError("ARTIFACT_LIMIT", "Session checkpoint limit is exhausted.");
-        }
-        if (
-          this.#checkpoints.some(
-            (checkpoint) => checkpoint.side === input.side && checkpoint.name === name,
-          )
-        ) {
-          throw new LiveBrowserError("INVALID_INPUT", "Checkpoint names must be unique per side.");
-        }
-        let checkpoint: LiveCheckpointRecord;
-        if (state.secretTainted) {
-          checkpoint = {
-            name,
-            side: input.side,
-            stateVersion: state.version,
-            path,
-            captured: false,
-            createdAt: this.#timestamp(),
-          };
-        } else {
-          const bytes = await state.controller.screenshot(signal);
-          if (bytes.byteLength === 0 || bytes.byteLength > this.#budgets.maxArtifactBytes) {
-            throw new LiveBrowserError(
-              "ARTIFACT_LIMIT",
-              "Checkpoint exceeds the per-artifact limit.",
-            );
-          }
-          if (this.#totalArtifactBytes + bytes.byteLength > this.#budgets.maxTotalArtifactBytes) {
-            throw new LiveBrowserError(
-              "ARTIFACT_LIMIT",
-              "Checkpoint exceeds the review artifact limit.",
-            );
-          }
-          const digest = sha256(bytes);
-          const artifactId = this.#opaqueDigestId("artifact", `${input.side}\0${name}\0${digest}`);
-          const metadata = {
-            artifactId,
-            digest,
-            byteSize: bytes.byteLength,
-            mediaType: "image/png" as const,
-          };
-          this.#artifacts.set(artifactId, { metadata, bytes: Uint8Array.from(bytes) });
-          this.#totalArtifactBytes += bytes.byteLength;
-          checkpoint = {
-            ...metadata,
-            name,
-            side: input.side,
-            stateVersion: state.version,
-            path,
-            captured: true,
-            createdAt: this.#timestamp(),
-          };
-        }
-        this.#checkpoints.push(checkpoint);
+        this.#requireCheckpointCapacity([{ side: input.side, name }]);
+        const pending = await this.#prepareCheckpoint(input.side, name, signal, 0);
+        const checkpoint = this.#commitCheckpoint(pending);
         return {
           value: checkpoint,
           result: checkpoint.captured
             ? `checkpoint ${name} captured as ${checkpoint.artifactId}`
             : `checkpoint ${name} withheld by secret-safe policy`,
-          stateVersion: state.version,
+          stateVersion: pending.stateVersion,
+        };
+      },
+    );
+  }
+
+  async checkpointPair(input: {
+    readonly name: string;
+    readonly signal?: AbortSignal;
+  }): Promise<{ readonly base: LiveCheckpointRecord; readonly head: LiveCheckpointRecord }> {
+    const name = parseLiveInput(evidenceNameSchema, input.name, "evidence name");
+    return this.#tool(
+      "browser_checkpoint_pair",
+      undefined,
+      { name },
+      input.signal,
+      async ({ signal }) => {
+        this.#requireCheckpointCapacity([
+          { side: "base", name },
+          { side: "head", name },
+        ]);
+        const baseState = this.#side("base");
+        const headState = this.#side("head");
+        const basePath = this.#safeCurrentPath("base", baseState.controller);
+        const headPath = this.#safeCurrentPath("head", headState.controller);
+        if (basePath !== headPath) {
+          throw new LiveBrowserError(
+            "INVALID_INPUT",
+            "Matched checkpoints must be captured at the same application path.",
+          );
+        }
+        if (baseState.secretTainted || headState.secretTainted) {
+          throw new LiveBrowserError(
+            "INVALID_INPUT",
+            "Matched screenshots are unavailable after a named secret was used on either side.",
+          );
+        }
+
+        const basePending = await this.#prepareCheckpoint("base", name, signal, 0);
+        const headPending = await this.#prepareCheckpoint(
+          "head",
+          name,
+          signal,
+          basePending.bytes?.byteLength ?? 0,
+        );
+        const base = this.#commitCheckpoint(basePending);
+        const head = this.#commitCheckpoint(headPending);
+        return {
+          value: { base, head },
+          result: `checkpoint pair ${name} captured as ${base.artifactId} and ${head.artifactId}`,
         };
       },
     );
@@ -1417,6 +1665,241 @@ export class LiveBrowserSession {
     }
   }
 
+  #parseApiRequest(request: LiveApiRequest): LiveApiRequest {
+    const parsed = liveApiRequestSchema.safeParse(request);
+    if (!parsed.success) {
+      throw new LiveBrowserError("INVALID_INPUT", "Live API request is invalid.", {
+        cause: parsed.error,
+      });
+    }
+    return parsed.data;
+  }
+
+  #resolveApiRequest(request: LiveApiRequest): ResolvedLiveApiRequest {
+    try {
+      return resolveLiveApiRequest(request, this.#secrets);
+    } catch (error) {
+      throw this.#normalizeApiError(error);
+    }
+  }
+
+  #normalizeApiError(error: unknown): LiveBrowserError {
+    if (error instanceof LiveBrowserError) return error;
+    if (error instanceof LiveApiContractError) {
+      return new LiveBrowserError(error.code, error.message, { cause: error });
+    }
+    return new LiveBrowserError(
+      "INVALID_INPUT",
+      "Live API evidence could not be evaluated safely.",
+      { cause: error },
+    );
+  }
+
+  #apiRequestSummary(request: ResolvedLiveApiRequest): Readonly<Record<string, unknown>> {
+    return {
+      method: request.evidenceSummary.method,
+      path: this.#redact(request.evidenceSummary.path),
+      headerNames: request.evidenceSummary.headerNames,
+      ...(request.evidenceSummary.body === undefined ? {} : { body: request.evidenceSummary.body }),
+    };
+  }
+
+  #apiAssertionSummary(assertion: LiveApiAssertion): Readonly<Record<string, unknown>> {
+    if (assertion.kind === "status") return { kind: assertion.kind, equals: assertion.equals };
+    if (assertion.kind === "body_includes") {
+      return { kind: assertion.kind, includes: this.#redact(assertion.includes) };
+    }
+    return {
+      kind: assertion.kind,
+      path: assertion.path,
+      equals:
+        typeof assertion.equals === "string" ? this.#redact(assertion.equals) : assertion.equals,
+    };
+  }
+
+  #requireApiResponseName(side: ReviewSide, name: string): void {
+    if (this.#apiResponses.some((response) => response.side === side && response.name === name)) {
+      throw new LiveBrowserError(
+        "INVALID_INPUT",
+        `API response name ${name} is already recorded for ${side}.`,
+      );
+    }
+  }
+
+  async #prepareApiResponse(
+    side: ReviewSide,
+    name: string,
+    request: LiveApiRequest,
+    resolved: ResolvedLiveApiRequest,
+    signal: AbortSignal,
+  ): Promise<PendingApiResponse> {
+    const state = this.#invalidate(side);
+    if (resolved.secretNames.length > 0) {
+      state.secretTainted = true;
+      state.recordingSecretTainted = true;
+    }
+    let raw: LiveApiRawResponse;
+    try {
+      raw = await state.controller.apiRequest(resolved, this.#budgets.maxApiResponseBytes, signal);
+    } catch (error) {
+      if (error instanceof LiveBrowserError) throw error;
+      throw new LiveBrowserError("INVALID_INPUT", "The live API request failed safely.", {
+        cause: error,
+      });
+    }
+    const rawText = Buffer.from(raw.body).toString("utf8");
+    const redactedBody = redactLiveApiText(
+      rawText.replace(/\uFFFD$/u, ""),
+      this.#redactionValues,
+      raw.bodyTruncated,
+    );
+    if (redactedBody !== rawText) {
+      state.secretTainted = true;
+      state.recordingSecretTainted = true;
+    }
+    const boundedBody = boundedUtf8(redactedBody, this.#budgets.maxApiResponseBytes);
+    const assertionBodyText = boundedBody.value;
+    const bodyPreview = boundedUtf8(assertionBodyText, 4_000).value;
+    const contentType =
+      raw.contentType === undefined
+        ? undefined
+        : boundedUtf8(this.#redact(raw.contentType), 256).value;
+    return {
+      name,
+      side,
+      stateVersion: state.version,
+      method: request.method,
+      path: request.path,
+      requestFingerprint: sha256(JSON.stringify(request)),
+      status: raw.status,
+      ...(contentType === undefined ? {} : { contentType }),
+      bodySha256: sha256(assertionBodyText),
+      bodyPreview,
+      bodyTruncated: raw.bodyTruncated || boundedBody.truncated,
+      capturedByteSize: Buffer.byteLength(assertionBodyText, "utf8"),
+      assertionBodyText,
+    };
+  }
+
+  #commitApiResponse(pending: PendingApiResponse): LiveApiResponseRecord {
+    const record: LiveApiResponseRecord = {
+      id: this.#opaqueId("response"),
+      name: pending.name,
+      sequence: ++this.#apiResponseSequence,
+      side: pending.side,
+      stateVersion: pending.stateVersion,
+      method: pending.method,
+      path: pending.path,
+      requestFingerprint: pending.requestFingerprint,
+      status: pending.status,
+      ...(pending.contentType === undefined ? {} : { contentType: pending.contentType }),
+      bodySha256: pending.bodySha256,
+      bodyPreview: pending.bodyPreview,
+      bodyTruncated: pending.bodyTruncated,
+      capturedByteSize: pending.capturedByteSize,
+      createdAt: this.#timestamp(),
+    };
+    this.#apiResponses.push(record);
+    this.#apiResponseBodies.set(record.id, pending.assertionBodyText);
+    return record;
+  }
+
+  #requireCheckpointCapacity(
+    requested: readonly { readonly side: ReviewSide; readonly name: string }[],
+  ): void {
+    if (this.#checkpoints.length + requested.length > this.#budgets.maxCheckpoints) {
+      throw new LiveBrowserError("ARTIFACT_LIMIT", "Session checkpoint limit is exhausted.");
+    }
+    for (const { side, name } of requested) {
+      if (
+        this.#checkpoints.some((checkpoint) => checkpoint.side === side && checkpoint.name === name)
+      ) {
+        throw new LiveBrowserError("INVALID_INPUT", "Checkpoint names must be unique per side.");
+      }
+    }
+  }
+
+  async #prepareCheckpoint(
+    side: ReviewSide,
+    name: string,
+    signal: AbortSignal,
+    pendingArtifactBytes: number,
+  ): Promise<PendingCheckpoint> {
+    const state = this.#side(side);
+    const path = this.#safeCurrentPath(side, state.controller);
+    if (state.secretTainted) {
+      return {
+        name,
+        side,
+        stateVersion: state.version,
+        path,
+        captured: false,
+      };
+    }
+
+    const bytes = await state.controller.screenshot(signal);
+    if (bytes.byteLength === 0 || bytes.byteLength > this.#budgets.maxArtifactBytes) {
+      throw new LiveBrowserError("ARTIFACT_LIMIT", "Checkpoint exceeds the per-artifact limit.");
+    }
+    if (
+      this.#totalArtifactBytes + pendingArtifactBytes + bytes.byteLength >
+      this.#budgets.maxTotalArtifactBytes
+    ) {
+      throw new LiveBrowserError("ARTIFACT_LIMIT", "Checkpoint exceeds the review artifact limit.");
+    }
+    return {
+      name,
+      side,
+      stateVersion: state.version,
+      path,
+      captured: true,
+      bytes: Uint8Array.from(bytes),
+      digest: sha256(bytes),
+    };
+  }
+
+  #commitCheckpoint(pending: PendingCheckpoint): LiveCheckpointRecord {
+    if (!pending.captured || !pending.bytes || !pending.digest) {
+      const checkpoint: LiveCheckpointRecord = {
+        name: pending.name,
+        side: pending.side,
+        stateVersion: pending.stateVersion,
+        path: pending.path,
+        captured: false,
+        createdAt: this.#timestamp(),
+      };
+      this.#checkpoints.push(checkpoint);
+      return checkpoint;
+    }
+
+    const artifactId = this.#opaqueDigestId(
+      "artifact",
+      `${pending.side}\0${pending.name}\0${pending.digest}`,
+    );
+    const metadata = {
+      artifactId,
+      digest: pending.digest,
+      byteSize: pending.bytes.byteLength,
+      mediaType: "image/png" as const,
+    };
+    this.#artifacts.set(artifactId, {
+      metadata,
+      bytes: Uint8Array.from(pending.bytes),
+    });
+    this.#totalArtifactBytes += pending.bytes.byteLength;
+    const checkpoint: LiveCheckpointRecord = {
+      ...metadata,
+      name: pending.name,
+      side: pending.side,
+      stateVersion: pending.stateVersion,
+      path: pending.path,
+      captured: true,
+      createdAt: this.#timestamp(),
+    };
+    this.#checkpoints.push(checkpoint);
+    return checkpoint;
+  }
+
   async #interaction(
     tool: "browser_click" | "browser_fill" | "browser_press" | "browser_select",
     side: ReviewSide,
@@ -1449,7 +1932,7 @@ export class LiveBrowserSession {
 
   async #tool<T>(
     tool: Exclude<LiveToolName, "finish_review">,
-    side: ReviewSide,
+    side: ReviewSide | undefined,
     input: Readonly<Record<string, unknown>>,
     externalSignal: AbortSignal | undefined,
     operation: (context: ToolContext) => Promise<{
@@ -1502,7 +1985,7 @@ export class LiveBrowserSession {
           id: this.#opaqueId("evidence"),
           sequence: evidenceSequence,
           tool,
-          side,
+          ...(side ? { side } : {}),
           ...(completed.stateVersion === undefined ? {} : { stateVersion: completed.stateVersion }),
           ...(completed.observationId ? { observationId: completed.observationId } : {}),
           input,
@@ -1518,8 +2001,7 @@ export class LiveBrowserSession {
           id: this.#opaqueId("evidence"),
           sequence: evidenceSequence,
           tool,
-          side,
-          stateVersion: this.#sides.get(side)?.version ?? 0,
+          ...(side ? { side, stateVersion: this.#sides.get(side)?.version ?? 0 } : {}),
           input,
           startedAt,
           completedAt: this.#timestamp(),
@@ -1678,6 +2160,89 @@ export class LiveBrowserSession {
     }
   }
 
+  #requireBrowserAssertionName(side: ReviewSide, name: string): void {
+    if (this.#assertions.some((assertion) => assertion.side === side && assertion.name === name)) {
+      throw new LiveBrowserError(
+        "INVALID_INPUT",
+        `Assertion name ${name} is already recorded for ${side}.`,
+      );
+    }
+  }
+
+  async #prepareBrowserAssertion(
+    side: ReviewSide,
+    name: string,
+    expected: LiveAssertion,
+    signal: AbortSignal,
+  ): Promise<PendingBrowserAssertion> {
+    this.#requireBrowserAssertionName(side, name);
+    const state = this.#side(side);
+    const path = this.#safeCurrentPath(side, state.controller);
+    let passed: boolean;
+    let expectedText: string;
+    let actualText: string;
+    if (expected.kind === "url") {
+      passed = path.includes(expected.includes);
+      expectedText = `path containing ${expected.includes}`;
+      actualText = path;
+    } else {
+      const count = await state.controller.count(expected.target, signal);
+      if (expected.kind === "visible" || expected.kind === "hidden") {
+        if (count > 1) {
+          throw new LiveBrowserError(
+            "LOCATOR_NOT_UNIQUE",
+            `Assertion locator resolved to ${count} elements; at most one is allowed.`,
+          );
+        }
+        const visible = count === 1 && (await state.controller.isVisible(expected.target, signal));
+        const desired = expected.kind === "visible";
+        passed = visible === desired;
+        expectedText = desired ? "visible" : "hidden";
+        actualText = visible ? "visible" : "hidden";
+      } else {
+        if (count !== 1) {
+          throw new LiveBrowserError(
+            "LOCATOR_NOT_UNIQUE",
+            `Assertion locator resolved to ${count} elements; exactly one is required.`,
+          );
+        }
+        const text = await state.controller.textContent(expected.target, signal);
+        passed = text.includes(expected.includes);
+        expectedText = `text containing ${expected.includes}`;
+        actualText = text;
+      }
+    }
+    const redactedActual = this.#redact(actualText);
+    if (redactedActual !== actualText) {
+      state.secretTainted = true;
+      state.recordingSecretTainted = true;
+    }
+    return {
+      name,
+      side,
+      stateVersion: state.version,
+      path,
+      kind: expected.kind,
+      locatorFingerprint: sha256(
+        JSON.stringify(expected.kind === "url" ? { kind: "url" } : expected.target),
+      ),
+      passed,
+      expected: boundedUtf8(this.#redact(expectedText), 1_000).value,
+      actual: boundedUtf8(redactedActual, 2_000).value,
+    };
+  }
+
+  #commitBrowserAssertion(pending: PendingBrowserAssertion): LiveAssertionRecord {
+    const assertion: LiveAssertionRecord = {
+      id: this.#opaqueId("assert"),
+      sequence: ++this.#assertionSequence,
+      createdAt: this.#timestamp(),
+      ...pending,
+    };
+    this.#assertions.push(assertion);
+    return assertion;
+  }
+
   #assertionSummary(assertion: LiveAssertion): Readonly<Record<string, unknown>> {
     if (assertion.kind === "url") {
       return { kind: assertion.kind, includes: this.#redact(assertion.includes) };
@@ -1791,6 +2356,7 @@ export class LiveBrowserSession {
       budgets.toolTimeoutMs > defaultBudgets.toolTimeoutMs ||
       budgets.maxSnapshotBytes > defaultBudgets.maxSnapshotBytes ||
       budgets.maxEventsPerRead > defaultBudgets.maxEventsPerRead ||
+      budgets.maxApiResponseBytes > defaultBudgets.maxApiResponseBytes ||
       budgets.maxArtifactBytes > defaultBudgets.maxArtifactBytes ||
       budgets.maxTotalArtifactBytes > defaultBudgets.maxTotalArtifactBytes;
     if (exceedsPolicyCeiling) {

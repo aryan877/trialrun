@@ -21,7 +21,8 @@ export const liveBrowserErrorCodeSchema = z.enum([
 const sideSchema = z.enum(["base", "head"]);
 const evidenceIdSchema = z.string().min(1).max(160);
 const timestampSchema = z.string().datetime({ offset: true });
-const maximumRecordingArtifactBytes = 64 * 1_024 * 1_024;
+export const maximumLiveBrowserRecordingArtifactBytes = 10 * 1_024 * 1_024;
+const maximumApiResponseBytes = 256 * 1_024;
 
 export const liveBrowserStatusSchema = z.strictObject({
   state: z.enum(["active", "cancelled", "finished", "timed_out"]),
@@ -37,8 +38,12 @@ export const liveBrowserStatusSchema = z.strictObject({
 });
 
 const liveToolNameSchema = z.enum([
+  "api_assert",
+  "api_request",
+  "api_request_pair",
   "browser_assert",
   "browser_checkpoint",
+  "browser_checkpoint_pair",
   "browser_click",
   "browser_count",
   "browser_events",
@@ -90,11 +95,33 @@ const liveAssertionRecordSchema = z.strictObject({
   side: sideSchema,
   stateVersion: z.number().int().nonnegative().max(1_000_000),
   path: z.string().max(2_000),
-  kind: z.enum(["visible", "hidden", "text", "url"]),
+  kind: z.enum(["visible", "hidden", "text", "url", "api_status", "api_text", "api_json"]),
   locatorFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  sourceResponseId: evidenceIdSchema.optional(),
   passed: z.boolean(),
   expected: z.string().max(1_000),
   actual: z.string().max(2_000),
+  createdAt: timestampSchema,
+});
+
+const liveApiResponseRecordSchema = z.strictObject({
+  id: z.string().regex(/^response:[0-9a-f]{64}$/),
+  name: z
+    .string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .max(80),
+  sequence: z.number().int().positive().max(1_000_000),
+  side: sideSchema,
+  stateVersion: z.number().int().nonnegative().max(1_000_000),
+  method: z.enum(["DELETE", "GET", "PATCH", "POST", "PUT"]),
+  path: z.string().min(1).max(2_000),
+  requestFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  status: z.number().int().min(100).max(599),
+  contentType: z.string().max(256).optional(),
+  bodySha256: z.string().regex(/^[0-9a-f]{64}$/),
+  bodyPreview: z.string().max(4_000),
+  bodyTruncated: z.boolean(),
+  capturedByteSize: z.number().int().nonnegative().max(maximumApiResponseBytes),
   createdAt: timestampSchema,
 });
 
@@ -153,7 +180,7 @@ const liveRecordingArtifactRecordSchema = z
       .string()
       .regex(/^[0-9a-f]{64}$/)
       .optional(),
-    byteSize: z.number().int().positive().max(maximumRecordingArtifactBytes).optional(),
+    byteSize: z.number().int().positive().max(maximumLiveBrowserRecordingArtifactBytes).optional(),
     mediaType: z.literal("video/webm").optional(),
     createdAt: timestampSchema,
   })
@@ -190,6 +217,7 @@ export const liveBrowserEvidenceSchema: z.ZodType<LiveBrowserEvidence> = z
           .max(80),
       )
       .max(1_000),
+    apiResponses: z.array(liveApiResponseRecordSchema).max(1_000),
     checkpoints: z.array(liveCheckpointRecordSchema).max(100),
     matchedCheckpointNames: z
       .array(
@@ -275,6 +303,41 @@ export const liveBrowserEvidenceSchema: z.ZodType<LiveBrowserEvidence> = z
       ["assertions"],
       "Assertion sequences",
     );
+    requireUnique(
+      evidence.apiResponses.map(({ id }) => id),
+      ["apiResponses"],
+      "API response IDs",
+    );
+    requireUnique(
+      evidence.apiResponses.map(({ name, side }) => `${side}:${name}`),
+      ["apiResponses"],
+      "API response side/name pairs",
+    );
+    requireIncreasing(
+      evidence.apiResponses.map(({ sequence }) => sequence),
+      ["apiResponses"],
+      "API response sequences",
+    );
+    for (const [index, assertion] of evidence.assertions.entries()) {
+      const apiAssertion = assertion.kind.startsWith("api_");
+      if (apiAssertion !== (assertion.sourceResponseId !== undefined)) {
+        context.addIssue({
+          code: "custom",
+          path: ["assertions", index, "sourceResponseId"],
+          message: "Only API assertions require a source response ID.",
+        });
+        continue;
+      }
+      if (!apiAssertion) continue;
+      const response = evidence.apiResponses.find(({ id }) => id === assertion.sourceResponseId);
+      if (!response || response.side !== assertion.side) {
+        context.addIssue({
+          code: "custom",
+          path: ["assertions", index, "sourceResponseId"],
+          message: "API assertion source must exist on the same review side.",
+        });
+      }
+    }
     requireUnique(
       evidence.checkpoints.map(({ name, side }) => `${side}:${name}`),
       ["checkpoints"],

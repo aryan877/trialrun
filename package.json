@@ -20,8 +20,7 @@
     "web:artifact:linux": "tsx scripts/build-web-artifact.ts",
     "web:artifact:verify": "tsx scripts/verify-web-artifact.ts",
     "web:artifact:deploy": "tsx scripts/deploy-web-artifact.ts",
-    "runner": "pnpm --filter @trialrun/runner start",
-    "test:e2e": "playwright test"
+    "runner": "pnpm --filter @trialrun/runner start"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",

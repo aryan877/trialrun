@@ -7,6 +7,7 @@ test-results/
 .turbo/
 .deploy/
 .data/
+/docs/submission/
 .env
 .env.local
 .DS_Store

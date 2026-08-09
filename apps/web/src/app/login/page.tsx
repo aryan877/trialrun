@@ -49,11 +49,7 @@ function AuthField({
   );
 }
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  readonly searchParams: SearchParams;
-}) {
+export default async function LoginPage({ searchParams }: { readonly searchParams: SearchParams }) {
   const [auth, query] = await Promise.all([publicAuth(), searchParams]);
   if (auth) redirect("/app");
 
@@ -66,9 +62,9 @@ export default async function LoginPage({
         ? "We could not create that account. Check the fields or try a different email."
         : authState === "server"
           ? "TrialRun could not reach the account service. Please try again."
-        : authState === "required"
-          ? "Sign in to open your TrialRun workspace."
-          : null;
+          : authState === "required"
+            ? "Sign in to open your TrialRun workspace."
+            : null;
 
   return (
     <main className="public-page min-h-dvh bg-white text-[#111111] lg:grid lg:grid-cols-2">
@@ -95,11 +91,16 @@ export default async function LoginPage({
                 : "Start with an account, then choose exactly which repositories TrialRun can access."}
             </p>
 
-            <nav aria-label="Account access" className="mt-8 grid grid-cols-2 rounded-lg bg-black/[0.055] p-1">
+            <nav
+              aria-label="Account access"
+              className="mt-8 grid grid-cols-2 rounded-lg bg-black/[0.055] p-1"
+            >
               <Link
                 aria-current={mode === "login" ? "page" : undefined}
                 className={`flex h-10 items-center justify-center rounded-md text-sm font-semibold transition ${
-                  mode === "login" ? "bg-white text-black shadow-sm" : "text-black/60 hover:text-black"
+                  mode === "login"
+                    ? "bg-white text-black shadow-sm"
+                    : "text-black/60 hover:text-black"
                 }`}
                 href="/login"
               >
@@ -108,7 +109,9 @@ export default async function LoginPage({
               <Link
                 aria-current={mode === "register" ? "page" : undefined}
                 className={`flex h-10 items-center justify-center rounded-md text-sm font-semibold transition ${
-                  mode === "register" ? "bg-white text-black shadow-sm" : "text-black/60 hover:text-black"
+                  mode === "register"
+                    ? "bg-white text-black shadow-sm"
+                    : "text-black/60 hover:text-black"
                 }`}
                 href="/login?mode=register"
               >
@@ -141,7 +144,7 @@ export default async function LoginPage({
                   label="Your name"
                   minLength={2}
                   name="displayName"
-                  placeholder="Aryan Kumar"
+                  placeholder="Your name"
                   type="text"
                 />
               ) : null}
@@ -197,12 +200,16 @@ export default async function LoginPage({
         />
         <div className="absolute inset-x-10 bottom-10 rounded-xl border border-white/35 bg-white/92 p-5 shadow-[0_24px_70px_rgba(41,17,80,0.24)] backdrop-blur-md xl:inset-x-auto xl:right-10 xl:w-[430px]">
           <div className="flex items-start gap-3">
-            <ShieldCheck aria-hidden="true" className="mt-0.5 size-6 shrink-0 text-[#2357ff]" weight="duotone" />
+            <ShieldCheck
+              aria-hidden="true"
+              className="mt-0.5 size-6 shrink-0 text-[#2357ff]"
+              weight="duotone"
+            />
             <div>
               <p className="font-semibold">Your Codex. A private review environment.</p>
               <p className="mt-1 text-sm leading-6 text-black/60">
-                Codex gets narrow repository and browser tools. Tested code never receives the
-                model credential or TrialRun infrastructure access.
+                Codex gets narrow repository and browser tools. Tested code never receives the model
+                credential or TrialRun infrastructure access.
               </p>
             </div>
           </div>

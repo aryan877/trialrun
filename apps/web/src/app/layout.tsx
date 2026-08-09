@@ -25,6 +25,7 @@ const publicSans = Instrument_Sans({
 export const metadata: Metadata = {
   title: "TrialRun — Test the change, not the claim",
   description: "Evidence-backed pull request reviews in disposable Zerops environments.",
+  icons: { icon: "/brand/trialrun.svg" },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

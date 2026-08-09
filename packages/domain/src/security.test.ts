@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   decryptSecret,
+  derivePublicProofToken,
   deriveCsrfToken,
   encryptSecret,
   redactText,
+  redactTruncatedText,
   verifyCsrfToken,
   verifyGitHubWebhookSignature,
+  verifyPublicProofToken,
 } from "./security";
 
 describe("security primitives", () => {
@@ -38,5 +41,24 @@ describe("security primitives", () => {
     const secret = "test token/123";
     const input = `${secret} ${encodeURIComponent(secret)} ${Buffer.from(secret).toString("base64")}`;
     expect(redactText(input, [secret])).not.toContain("token");
+  });
+
+  it("redacts a secret prefix cut off at a bounded-response edge", () => {
+    const secret = "secret-boundary-value";
+    expect(redactTruncatedText(`${secret.repeat(2)}secr`, [secret])).toBe(
+      "[REDACTED][REDACTED][REDACTED]",
+    );
+  });
+
+  it("scopes an unguessable public proof token to one exact review and vault key", () => {
+    const reviewId = "19583e63-93d7-42e9-b512-65206e53e8a4";
+    const key = Buffer.alloc(32, 7);
+    const token = derivePublicProofToken(reviewId, key);
+
+    expect(token).toMatch(/^p1_[A-Za-z0-9_-]{43}$/);
+    expect(verifyPublicProofToken(reviewId, token, key)).toBe(true);
+    expect(verifyPublicProofToken("30b799e6-5cba-4053-99d3-22b4d72e552d", token, key)).toBe(false);
+    expect(verifyPublicProofToken(reviewId, token, Buffer.alloc(32, 8))).toBe(false);
+    expect(verifyPublicProofToken(reviewId, "p1_invalid", key)).toBe(false);
   });
 });

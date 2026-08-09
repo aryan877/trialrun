@@ -15,7 +15,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "3.1106.0",
     "@modelcontextprotocol/sdk": "1.30.0",
-    "@trialrun/agent-runtime": "workspace:*",
     "@trialrun/domain": "workspace:*",
     "ajv": "8.17.1",
     "playwright": "1.62.1",

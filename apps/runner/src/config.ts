@@ -22,7 +22,7 @@ const configSchema = z
       .default(`${hostname()}-${process.pid}-${randomUUID().slice(0, 8)}`),
     RUNNER_POLL_MS: z.coerce.number().int().min(100).max(30_000).default(750),
     RUNNER_LEASE_SECONDS: z.coerce.number().int().min(30).max(600).default(90),
-    RUNNER_JOB_TIMEOUT_SECONDS: z.coerce.number().int().min(30).max(3_600).default(900),
+    RUNNER_JOB_TIMEOUT_SECONDS: z.coerce.number().int().min(30).max(3_600).default(2_400),
     CODEX_ANALYST_ENABLED: z.enum(["true", "false"]).default("true"),
     CODEX_BINARY: z.string().min(1).default("codex"),
     CODEX_MODEL: z.string().min(1).default("gpt-5.6-sol"),

@@ -65,6 +65,37 @@ const generatedManifestSchema = z.strictObject({
   zerops: z.tuple([generatedSetupSchema]),
 });
 
+const executorPrepareCommand =
+  "PLAYWRIGHT_BROWSERS_PATH=/home/zerops/.cache/ms-playwright PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=120000 npx --yes playwright@1.62.1 install --with-deps --only-shell chromium";
+
+const executorManifestSchema = z.strictObject({
+  zerops: z.tuple([
+    z.strictObject({
+      setup: z.literal("executor"),
+      build: z.strictObject({
+        base: z.literal("ubuntu/nodejs@24"),
+        deployFiles: z.literal("."),
+      }),
+      deploy: z.strictObject({
+        readinessCheck: z.strictObject({
+          httpGet: z.strictObject({ port: z.literal(3_000), path: z.literal("/health") }),
+        }),
+      }),
+      run: z.strictObject({
+        base: z.literal("ubuntu/nodejs@24"),
+        prepareCommands: z.tuple([z.literal(executorPrepareCommand)]),
+        envVariables: z.strictObject({
+          PLAYWRIGHT_BROWSERS_PATH: z.literal("/home/zerops/.cache/ms-playwright"),
+        }),
+        ports: z.tuple([
+          z.strictObject({ port: z.literal(3_000), httpSupport: z.literal(true) }),
+        ]),
+        start: z.literal("./node_modules/.bin/tsx src/index.ts"),
+      }),
+    }),
+  ]),
+});
+
 type ApplicationDeployment = Extract<
   CompiledDeploymentTarget,
   { readonly side: "base" | "head" }
@@ -227,6 +258,17 @@ export function assertZeropsDeploymentContract(
   deployment: CompiledDeploymentTarget,
 ): void {
   const parsedYaml: unknown = parseYaml(yaml);
+  if (deployment.side === "executor") {
+    if (
+      deployment.setup !== "executor" ||
+      deployment.port !== 3_000 ||
+      deployment.healthPath !== "/health"
+    ) {
+      throw new Error("The compiled executor target does not match TrialRun's pinned contract.");
+    }
+    executorManifestSchema.parse(parsedYaml);
+    return;
+  }
   const parsed = manifestEnvelopeSchema.parse(parsedYaml);
   const setup = selectedSetup(parsed, deployment.setup);
   const port = setup.run.ports.find((candidate) => candidate.port === deployment.port);
@@ -242,8 +284,6 @@ export function assertZeropsDeploymentContract(
   ) {
     throw new Error(`Setup ${deployment.setup} lacks its exact HTTP readiness gate.`);
   }
-
-  if (deployment.side === "executor") return;
   const generated = generatedManifestSchema.parse(parsedYaml).zerops[0];
   const expected = generatedSetupFor(deployment);
   if (

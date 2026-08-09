@@ -159,7 +159,7 @@ describe("repository infrastructure policy", () => {
     };
 
     expect(supportedZeropsApplicationTypes).not.toContain("alpine/docker@26.1.5");
-    expect(supportedZeropsRuntimeTypes).toContain("alpine/docker@26.1.5");
+    expect(supportedZeropsRuntimeTypes).not.toContain("alpine/docker@26.1.5");
     const parsed = infrastructureProposalSchema.safeParse(dockerProposal);
     expect(parsed.success).toBe(false);
     if (parsed.success)
@@ -458,8 +458,19 @@ describe("repository infrastructure policy", () => {
       run: { base: "alpine/nodejs@24", start: "node dist/server.js" },
     });
     expect(topology.services.find(({ hostname }) => hostname === "executor")?.type).toBe(
-      "alpine/docker@26.1.5",
+      "ubuntu/nodejs@24",
     );
+    expect(
+      topology.services.find(({ hostname }) => hostname === "executor")?.verticalAutoscaling,
+    ).toEqual({
+      cpuMode: "SHARED",
+      minCpu: 2,
+      maxCpu: 2,
+      minRam: 4,
+      maxRam: 4,
+      minDisk: 10,
+      maxDisk: 10,
+    });
     expect(
       topology.services
         .filter(({ hostname }) => hostname !== "executor")

@@ -12,6 +12,7 @@ import {
   githubInstallations,
   repositories,
   repositoryRecipes,
+  requestReviewCancellation,
   reviews,
 } from "@trialrun/db";
 import {
@@ -225,11 +226,12 @@ async function handleIssueComment(payload: unknown): Promise<void> {
     .orderBy(desc(reviews.createdAt))
     .limit(1);
   if (!latest) return;
-  if (command === "cancel" && !["completed", "inconclusive", "cancelled"].includes(latest.status)) {
-    await database()
-      .update(reviews)
-      .set({ cancelRequestedAt: new Date(), statusMessage: "Cancellation requested from GitHub" })
-      .where(eq(reviews.id, latest.id));
+  if (command === "cancel") {
+    await requestReviewCancellation(
+      database(),
+      latest.id,
+      "Cancellation requested from GitHub",
+    );
   }
   if (command === "explain") {
     await githubApp().createPullRequestComment(event.installation.id, {

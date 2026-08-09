@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   agentMissionBudgetLimits,
@@ -99,6 +100,7 @@ function unprovenFinding(): StaticCodeRiskFinding {
     verification: {
       state: "unproven",
       reason: "Static inspection found the risk, but no recorded live reproduction exists yet.",
+      evidenceIds: [],
     },
   };
 }
@@ -108,6 +110,7 @@ function reproducedFinding(): StaticCodeRiskFinding {
     ...unprovenFinding(),
     verification: {
       state: "reproduced",
+      reason: "",
       evidenceIds: ["event:104", "artifact:checkout-head"],
     },
   };
@@ -115,11 +118,11 @@ function reproducedFinding(): StaticCodeRiskFinding {
 
 function report(): AgentTerminalReport {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     missionId: mission().missionId,
     termination: "mission_complete",
-    evidenceSummary:
-      "Repository inspection and live investigation evidence are ready for the oracle.",
+    verdict: "fail",
+    evidenceSummary: "The reproduced checkout defect makes this pull request unsafe to merge.",
     evidenceIds: ["event:104", "artifact:checkout-head"],
     questionAnswers: [
       {
@@ -140,7 +143,6 @@ function report(): AgentTerminalReport {
     ],
     codeRiskFindings: [reproducedFinding()],
     limitations: ["Only the declared checkout journey was investigated live."],
-    oracleHandoff: "required",
   };
 }
 
@@ -268,7 +270,7 @@ describe("agent contracts", () => {
     expect(
       staticCodeRiskFindingSchema.safeParse({
         ...unprovenFinding(),
-        verification: { state: "reproduced", evidenceIds: [] },
+        verification: { state: "reproduced", reason: "", evidenceIds: [] },
       }).success,
     ).toBe(false);
     expect(
@@ -283,8 +285,31 @@ describe("agent contracts", () => {
     ).toBe(false);
   });
 
+  it("emits a Codex structured-output schema without unsupported oneOf unions", () => {
+    const schema = z.toJSONSchema(agentTerminalReportSchema, { target: "draft-7" });
+    expect(JSON.stringify(schema)).not.toContain('"oneOf"');
+    const structuredOutputShape = z.object({
+      properties: z.object({
+        codeRiskFindings: z.object({
+          items: z.object({
+            properties: z.object({
+              verification: z.object({ required: z.array(z.string()) }),
+            }),
+          }),
+        }),
+      }),
+    });
+    expect(
+      structuredOutputShape.parse(schema).properties.codeRiskFindings.items.properties.verification
+        .required,
+    ).toEqual(["state", "reason", "evidenceIds"]);
+  });
+
   it("accepts only declared recorded evidence references in a terminal report", () => {
     expect(agentTerminalReportSchema.safeParse(report()).success).toBe(true);
+    expect(agentTerminalReportSchema.safeParse({ ...report(), evidenceIds: [] }).success).toBe(
+      false,
+    );
     const unknownEvidence = report();
     unknownEvidence.questionAnswers[0] = {
       ...unknownEvidence.questionAnswers[0]!,
@@ -293,14 +318,15 @@ describe("agent contracts", () => {
     expect(agentTerminalReportSchema.safeParse(unknownEvidence).success).toBe(false);
   });
 
-  it("cannot encode a pass, fail, or inconclusive review verdict", () => {
+  it("requires Codex to return the review verdict", () => {
     for (const verdict of ["pass", "fail", "inconclusive"] as const) {
-      expect(agentTerminalReportSchema.safeParse({ ...report(), verdict }).success).toBe(false);
-      expect(
-        agentTerminalReportSchema.safeParse({ ...report(), termination: verdict }).success,
-      ).toBe(false);
+      expect(agentTerminalReportSchema.safeParse({ ...report(), verdict }).success).toBe(true);
     }
-    expect(agentTerminalReportSchema.keyof().options).not.toContain("verdict");
+    const withoutVerdict = Object.fromEntries(
+      Object.entries(report()).filter(([key]) => key !== "verdict"),
+    );
+    expect(agentTerminalReportSchema.safeParse(withoutVerdict).success).toBe(false);
+    expect(agentTerminalReportSchema.keyof().options).toContain("verdict");
     expect(agentTerminalReportSchema.keyof().options).not.toContain("passed");
   });
 

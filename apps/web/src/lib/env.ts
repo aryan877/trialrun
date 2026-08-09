@@ -87,6 +87,9 @@ const serverEnvSchema = z
     if (value.NODE_ENV === "production" && !value.CSRF_SECRET_BASE64) {
       context.addIssue({ code: "custom", message: "Production requires CSRF_SECRET_BASE64." });
     }
+    if (value.NODE_ENV === "production" && !value.VAULT_KEY_BASE64) {
+      context.addIssue({ code: "custom", message: "Production requires VAULT_KEY_BASE64." });
+    }
     if (Boolean(value.GITHUB_APP_ID) !== Boolean(value.GITHUB_PRIVATE_KEY_BASE64)) {
       context.addIssue({
         code: "custom",

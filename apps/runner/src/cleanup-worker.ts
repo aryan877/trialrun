@@ -10,6 +10,7 @@ import {
   type ZeropsCleanupProof,
 } from "@trialrun/db";
 import { redactText } from "@trialrun/domain";
+import { isZeropsProjectAbsentResponse } from "@trialrun/executor";
 import { z } from "zod";
 
 const zeropsIdSchema = z.string().min(1).max(100);
@@ -145,19 +146,24 @@ export class ZeropsCleanupClient implements ExactZeropsProjectDeleter {
       },
       signal: AbortSignal.any([signal, AbortSignal.timeout(this.#requestTimeoutMs)]),
     });
-    if (response.status === 404) return { status: 404, body: null };
-    if (!response.ok) {
-      throw new Error(`Zerops API ${method} ${path} returned HTTP ${response.status}.`);
-    }
     const text = await response.text();
     if (Buffer.byteLength(text, "utf8") > 1_000_000) {
       throw new Error(`Zerops API ${method} ${path} returned an oversized response.`);
     }
-    if (text.length === 0) return { status: response.status, body: {} };
+    if (text.length === 0) {
+      if (!response.ok && response.status !== 404) {
+        throw new Error(`Zerops API ${method} ${path} returned HTTP ${response.status}.`);
+      }
+      return { status: response.status, body: null };
+    }
     try {
       const body: unknown = JSON.parse(text);
+      if (!response.ok && !isZeropsProjectAbsentResponse(response.status, body)) {
+        throw new Error(`Zerops API ${method} ${path} returned HTTP ${response.status}.`);
+      }
       return { status: response.status, body };
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Zerops API ")) throw error;
       throw new Error(`Zerops API ${method} ${path} returned invalid JSON.`);
     }
   }
@@ -198,7 +204,7 @@ export class ZeropsCleanupClient implements ExactZeropsProjectDeleter {
       "GET",
       signal,
     );
-    if (response.status === 404) return null;
+    if (isZeropsProjectAbsentResponse(response.status, response.body)) return null;
     const project = projectSchema.parse(response.body);
     this.#assertExactProject(project, claim, expectedDescription);
     return project;
@@ -233,7 +239,7 @@ export class ZeropsCleanupClient implements ExactZeropsProjectDeleter {
         "GET",
         signal,
       );
-      if (response.status === 404) {
+      if (isZeropsProjectAbsentResponse(response.status, response.body)) {
         throw new Error("The exact Zerops deletion process disappeared before completion.");
       }
       process = processSchema.parse(response.body);
@@ -270,7 +276,7 @@ export class ZeropsCleanupClient implements ExactZeropsProjectDeleter {
         completedAt: new Date().toISOString(),
         providerProjectId: projectId,
         deleted: true,
-        message: "The exact Zerops project was already absent.",
+        message: "The exact Zerops API returned projectNotFound for this persisted project ID.",
       };
     }
 
@@ -281,7 +287,7 @@ export class ZeropsCleanupClient implements ExactZeropsProjectDeleter {
         "DELETE",
         operationSignal,
       );
-      if (response.status === 404) {
+      if (isZeropsProjectAbsentResponse(response.status, response.body)) {
         return {
           startedAt,
           completedAt: new Date().toISOString(),

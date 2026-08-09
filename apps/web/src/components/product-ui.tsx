@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Check, Info, OctagonAlert, TriangleAlert } from "lucide-react";
 
@@ -31,11 +32,18 @@ export function TrialRunWordmark({ compact = false }: { readonly compact?: boole
     <span
       aria-label="TrialRun"
       className={cn(
-        "inline-flex items-baseline font-semibold tracking-[-0.04em] text-foreground",
+        "inline-flex items-center gap-2 font-semibold tracking-[-0.04em] text-foreground",
         compact ? "text-base" : "text-lg",
       )}
     >
-      trial<span className="text-signal-running">/</span>run
+      <Image
+        alt=""
+        aria-hidden="true"
+        height={compact ? 22 : 24}
+        src="/brand/trialrun.svg"
+        width={compact ? 22 : 24}
+      />
+      trialrun
     </span>
   );
 }

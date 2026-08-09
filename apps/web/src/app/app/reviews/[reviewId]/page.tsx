@@ -97,7 +97,6 @@ function eventFacts(payload: Readonly<Record<string, unknown>>): readonly {
     ["goalCount", "Goals"],
     ["maxToolCalls", "Tool budget"],
     ["maxDurationSeconds", "Time budget (seconds)"],
-    ["runtimeFindingCount", "Runtime findings"],
     ["codeRiskCount", "Code risks"],
     ["codeStrengthCount", "Code strengths"],
     ["threadId", "Codex thread"],
@@ -221,7 +220,7 @@ export default async function ReviewDetail({
       .select()
       .from(findings)
       .where(eq(findings.reviewId, owned.review.id))
-      .orderBy(asc(findings.firstDivergentStep), asc(findings.createdAt)),
+      .orderBy(asc(findings.createdAt)),
     db
       .select()
       .from(artifacts)
@@ -368,7 +367,8 @@ export default async function ReviewDetail({
                 </div>
                 <p className="mt-3 text-xs leading-5 text-muted-foreground">
                   One context-rich Codex thread reads the exact base/head snapshots, investigates
-                  the live apps, and hands recorded evidence to an independent oracle.
+                  the live apps, and writes the review verdict. TrialRun verifies its citations and
+                  recorded evidence before publishing it unchanged.
                 </p>
                 <dl className="mt-3">
                   <Definition term="Codex thread" mono>
@@ -400,35 +400,42 @@ export default async function ReviewDetail({
               </div>
               <div className="overflow-hidden rounded-[4px] border border-border">
                 <ol>
-                {owned.review.agentMission.goals.map((goal, index) => (
-                  <li
-                    className="grid grid-cols-[40px_minmax(0,1fr)] border-b border-border last:border-b-0"
-                    key={goal.id}
-                  >
-                    <span className="flex items-center justify-center border-r border-border font-mono text-[10px] text-muted-foreground">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="px-3 py-3">
-                      <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-info uppercase">
-                        {goal.kind.replaceAll("_", " ")} · {goal.priority}
-                      </p>
-                      <p className="mt-1 text-sm leading-5">{goal.objective}</p>
-                    </div>
-                  </li>
-                ))}
+                  {owned.review.agentMission.goals.map((goal, index) => (
+                    <li
+                      className="grid grid-cols-[40px_minmax(0,1fr)] border-b border-border last:border-b-0"
+                      key={goal.id}
+                    >
+                      <span className="flex items-center justify-center border-r border-border font-mono text-[10px] text-muted-foreground">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <div className="px-3 py-3">
+                        <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-info uppercase">
+                          {goal.kind.replaceAll("_", " ")} · {goal.priority}
+                        </p>
+                        <p className="mt-1 text-sm leading-5">{goal.objective}</p>
+                      </div>
+                    </li>
+                  ))}
                 </ol>
                 {owned.review.agentTerminalReport ? (
                   <div className="border-t border-border bg-black/10 p-4">
                     <p className="text-[10px] font-semibold tracking-[0.08em] text-signal-running uppercase">
-                      Validated agent handoff · {owned.review.agentTerminalReport.termination.replaceAll("_", " ")}
+                      Validated agent handoff ·{" "}
+                      {owned.review.agentTerminalReport.termination.replaceAll("_", " ")}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
                       {owned.review.agentTerminalReport.evidenceSummary}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-muted-foreground">
-                      <span>{owned.review.agentTerminalReport.evidenceIds.length} cited evidence IDs</span>
-                      <span>{owned.review.agentTerminalReport.codeStrengths.length} code strengths</span>
-                      <span>{owned.review.agentTerminalReport.codeRiskFindings.length} code risks</span>
+                      <span>
+                        {owned.review.agentTerminalReport.evidenceIds.length} cited evidence IDs
+                      </span>
+                      <span>
+                        {owned.review.agentTerminalReport.codeStrengths.length} code strengths
+                      </span>
+                      <span>
+                        {owned.review.agentTerminalReport.codeRiskFindings.length} code risks
+                      </span>
                     </div>
                     {owned.review.agentTerminalReport.limitations.length ? (
                       <ul className="mt-3 list-disc space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
@@ -451,7 +458,7 @@ export default async function ReviewDetail({
 
         <section className="space-y-4" aria-labelledby="browser-recordings">
           <SectionHeading
-            description="The pull request recording is the primary behavior proof. Its matching base recording sits beside it on wide screens and below it on smaller screens. Both stream from the existing owner-scoped artifact route."
+            description="The pull request recording is the primary behavior proof. The corresponding base recording sits beside it on wide screens and below it on smaller screens. Both stream from the existing owner-scoped artifact route."
             id="browser-recordings"
             title="Recorded browser proof"
           />
@@ -469,7 +476,7 @@ export default async function ReviewDetail({
 
         <section className="space-y-4" aria-labelledby="findings">
           <SectionHeading
-            description="Runtime regressions come only from deterministic matched evidence. Code risks carry verified file/line citations and remain visibly unproven unless a base/head reproduction supports them."
+            description="Codex writes the findings and verdict. TrialRun checks every file/line citation and evidence ID against this exact run; code-only risks remain visibly unproven."
             id="findings"
             title="Findings"
           />
@@ -477,10 +484,10 @@ export default async function ReviewDetail({
             <EmptyState
               description={
                 owned.review.verdict === "pass"
-                  ? "The pull request satisfied every recorded assertion that passed on the base commit."
+                  ? "Codex approved this pull request and did not return a structured risk finding."
                   : owned.review.verdict
                     ? "No structured finding rows were persisted for this verdict. Review the event timeline for the recorded cause."
-                    : "Findings are persisted after both sides finish and deterministic comparison runs."
+                    : "Findings appear after Codex finishes and TrialRun verifies its cited proof."
               }
               title={
                 owned.review.verdict === "pass"
@@ -503,11 +510,7 @@ export default async function ReviewDetail({
                       <h3 className="mt-3 text-base leading-6 font-medium">{finding.title}</h3>
                     </div>
                     <span className="font-mono text-[10px] text-muted-foreground">
-                      {finding.firstDivergentStep === null
-                        ? finding.kind.startsWith("code_risk_")
-                          ? "Cited code risk"
-                          : "Matched runtime evidence"
-                        : `First divergence: step ${finding.firstDivergentStep + 1}`}
+                      Codex finding
                     </span>
                   </div>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">{finding.summary}</p>

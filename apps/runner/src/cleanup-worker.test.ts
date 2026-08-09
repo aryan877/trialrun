@@ -95,7 +95,7 @@ describe("exact Zerops project deletion", () => {
       jsonResponse(process("PENDING")),
       jsonResponse(process("FINISHED")),
       jsonResponse(project({ status: "DELETING" })),
-      new Response(null, { status: 404 }),
+      jsonResponse({ error: { code: "projectNotFound", message: "Project not found." } }, 400),
     ]);
 
     const proof = await cleanupClient(requests.fetchFunction).deleteClaimedProject(claim());
@@ -116,14 +116,36 @@ describe("exact Zerops project deletion", () => {
     );
   });
 
-  it("records absence without issuing a mutation", async () => {
-    const requests = responseQueue([new Response(null, { status: 404 })]);
+  it("records typed project absence without issuing a mutation", async () => {
+    const requests = responseQueue([
+      jsonResponse({ error: { code: "projectNotFound", message: "Project not found." } }, 400),
+    ]);
 
     const proof = await cleanupClient(requests.fetchFunction).deleteClaimedProject(claim());
 
     expect(proof).toMatchObject({ providerProjectId: projectId, deleted: true });
     expect(requests.calls).toHaveLength(1);
     expect(requests.calls[0]?.init.method).toBe("GET");
+  });
+
+  it("does not mistake a generic HTTP 404 for typed project absence", async () => {
+    const requests = responseQueue([new Response(null, { status: 404 })]);
+
+    await expect(
+      cleanupClient(requests.fetchFunction).deleteClaimedProject(claim()),
+    ).rejects.toThrow();
+    expect(requests.calls).toHaveLength(1);
+  });
+
+  it("does not mistake an unrelated HTTP 400 for project absence", async () => {
+    const requests = responseQueue([
+      jsonResponse({ error: { code: "validationFailed", message: "Bad request." } }, 400),
+    ]);
+
+    await expect(
+      cleanupClient(requests.fetchFunction).deleteClaimedProject(claim()),
+    ).rejects.toThrow("returned HTTP 400");
+    expect(requests.calls).toHaveLength(1);
   });
 
   it.each([

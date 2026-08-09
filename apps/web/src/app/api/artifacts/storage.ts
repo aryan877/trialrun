@@ -108,6 +108,39 @@ export function parseArtifactRange(
   return { start, end, length: end - start + 1 };
 }
 
+export async function readVerifiedArtifactBytes(
+  body: ReadableStream<Uint8Array>,
+  expectedSize: number,
+  expectedSha256: string,
+  maximumBytes: number,
+): Promise<Buffer> {
+  if (expectedSize > maximumBytes) {
+    throw new ArtifactStorageError("Artifact exceeds the public proof size limit.");
+  }
+  const chunks: Buffer[] = [];
+  const reader = body.getReader();
+  let size = 0;
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      size += result.value.byteLength;
+      if (size > expectedSize || size > maximumBytes) {
+        throw new ArtifactStorageError("Artifact bytes exceed their durable size.");
+      }
+      chunks.push(Buffer.from(result.value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = Buffer.concat(chunks);
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  if (bytes.byteLength !== expectedSize || sha256 !== expectedSha256.toLowerCase()) {
+    throw new ArtifactStorageError("Artifact bytes do not match their durable proof.");
+  }
+  return bytes;
+}
+
 function isWithinRoot(root: string, candidate: string): boolean {
   const pathFromRoot = relative(root, candidate);
   return (
@@ -386,7 +419,9 @@ export function artifactResponseHeaders(input: {
     "Content-Security-Policy": "default-src 'none'; sandbox",
     "Content-Type": mediaType,
     "Cross-Origin-Resource-Policy": "same-origin",
+    "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
   });
   if (input.range) {
     headers.set("Content-Range", `bytes ${input.range.start}-${input.range.end}/${input.size}`);
@@ -405,6 +440,8 @@ export function rangeNotSatisfiableHeaders(size: number): Headers {
     "Accept-Ranges": "bytes",
     "Cache-Control": "private, no-store, max-age=0",
     "Content-Range": `bytes */${size}`,
+    "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
+    "X-Robots-Tag": "noindex, nofollow, noarchive",
   });
 }

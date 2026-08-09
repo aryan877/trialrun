@@ -16,6 +16,8 @@ describe("loadCloudExecutorConfig", () => {
     expect(
       loadCloudExecutorConfig({
         ...validEnvironment,
+        HOME: "/home/zerops",
+        PATH: "/usr/local/bin:/usr/bin:/bin",
         TRIALRUN_TEST_SECRETS_BASE64: Buffer.from(
           JSON.stringify({ TEST_CARD_TOKEN: "secret-value" }),
         ).toString("base64"),

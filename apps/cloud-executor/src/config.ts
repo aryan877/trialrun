@@ -39,7 +39,15 @@ export interface CloudExecutorConfig {
 export function loadCloudExecutorConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): CloudExecutorConfig {
-  const parsed = executorConfigSchema.parse(environment);
+  const parsed = executorConfigSchema.parse({
+    HOST: environment.HOST,
+    PORT: environment.PORT,
+    TRIALRUN_EXECUTION_TOKEN: environment.TRIALRUN_EXECUTION_TOKEN,
+    TRIALRUN_REVIEW_ID: environment.TRIALRUN_REVIEW_ID,
+    TRIALRUN_BASE_URL: environment.TRIALRUN_BASE_URL,
+    TRIALRUN_HEAD_URL: environment.TRIALRUN_HEAD_URL,
+    TRIALRUN_TEST_SECRETS_BASE64: environment.TRIALRUN_TEST_SECRETS_BASE64,
+  });
   let decodedSecrets: unknown;
   try {
     decodedSecrets = JSON.parse(

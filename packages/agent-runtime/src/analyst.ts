@@ -6,6 +6,8 @@ import { isAbsolute, join } from "node:path";
 import {
   infrastructureProposalSchema,
   managedServiceSourceProperties,
+  proposedApplicationServiceSchema,
+  proposedManagedDependencySchema,
   redactText,
   supportedZeropsApplicationTypes,
   supportedZeropsManagedTypes,
@@ -59,6 +61,48 @@ const disabledAnalystFeatures = [
 ] as const;
 
 const repositoryToolNames = ["repository_tree", "repository_search", "repository_read"] as const;
+
+const codexObjectStorageDependencySchema = z.strictObject({
+  ...proposedManagedDependencySchema.shape,
+  zeropsType: z.literal("object-storage"),
+  resources: z.null(),
+  storageSizeGb: proposedManagedDependencySchema.shape.storageSizeGb.unwrap(),
+});
+
+const codexManagedServiceDependencySchema = z.strictObject({
+  ...proposedManagedDependencySchema.shape,
+  zeropsType: proposedManagedDependencySchema.shape.zeropsType.exclude(["object-storage"]),
+  resources: proposedManagedDependencySchema.shape.resources.unwrap(),
+  storageSizeGb: z.null(),
+});
+
+const codexManagedDependencySchema = z.union([
+  codexObjectStorageDependencySchema,
+  codexManagedServiceDependencySchema,
+]);
+
+const codexApplicationServiceSchema = z.strictObject({
+  ...proposedApplicationServiceSchema.shape,
+  healthPath: z.string().startsWith("/").max(300),
+});
+
+export const codexInfrastructureProposalSchema = z.strictObject({
+  ...infrastructureProposalSchema.shape,
+  applications: z.array(codexApplicationServiceSchema).min(1).max(6),
+  dependencies: z.array(codexManagedDependencySchema).max(8),
+});
+
+export function parseCodexInfrastructureProposal(input: unknown): InfrastructureProposal {
+  const proposal = codexInfrastructureProposalSchema.parse(input);
+  return infrastructureProposalSchema.parse({
+    ...proposal,
+    dependencies: proposal.dependencies.map(({ resources, storageSizeGb, ...dependency }) => ({
+      ...dependency,
+      ...(resources === null ? {} : { resources }),
+      ...(storageSizeGb === null ? {} : { storageSizeGb }),
+    })),
+  });
+}
 
 function analystSafetyArguments(repositoryMcpUrl: string): string[] {
   return [
@@ -171,7 +215,7 @@ export class CodexCliInfrastructureAnalyst implements InfrastructureAnalyst {
     const outputPath = join(directory, "proposal.json");
     await writeFile(
       schemaPath,
-      JSON.stringify(z.toJSONSchema(infrastructureProposalSchema, { target: "draft-7" })),
+      JSON.stringify(z.toJSONSchema(codexInfrastructureProposalSchema, { target: "draft-7" })),
       { encoding: "utf8", mode: 0o600 },
     );
     const prompt = [
@@ -192,6 +236,7 @@ export class CodexCliInfrastructureAnalyst implements InfrastructureAnalyst {
       "Applications must stay private. Select exactly one browser/API test target.",
       "Infer ports and health routes from actual application code, scripts, framework configuration, or documentation backed by code. Do not invent a health route.",
       "Infer managed services only from strong client, schema, import, or environment-name evidence. Never include secret values; report names only.",
+      "For object-storage dependencies, set resources to null and storageSizeGb to an integer. For every other dependency, set resources to a bounded object and storageSizeGb to null.",
       "If a health path, service purpose, binding, setup, or topology is ambiguous, add a specific unresolved question.",
       "Keep resources minimal; deterministic policy will clamp or reject the result.",
     ].join("\n");
@@ -254,7 +299,7 @@ export class CodexCliInfrastructureAnalyst implements InfrastructureAnalyst {
       });
       const raw = await readFile(outputPath, "utf8");
       const parsedProposal: unknown = JSON.parse(raw);
-      const proposal = infrastructureProposalSchema.parse(parsedProposal);
+      const proposal = parseCodexInfrastructureProposal(parsedProposal);
       if (proposal.sourceSha !== sourceSha) {
         throw new Error("Infrastructure proposal does not match the analyzed commit.");
       }

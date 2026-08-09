@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, GithubLogo } from "@phosphor-icons/react/ssr";
 
@@ -13,11 +14,7 @@ export function PublicWordmark({ inverse = false }: { readonly inverse?: boolean
       )}
       href="/"
     >
-      <svg aria-hidden="true" className="size-7" viewBox="0 0 32 32">
-        <path d="M3 5.5h12v21H3z" fill="currentColor" />
-        <path d="M17 5.5h12v21H17z" fill={inverse ? "#ff78c7" : "#2357ff"} />
-        <path d="M12.5 12h7v8h-7z" fill={inverse ? "#ffc7ea" : "#ff3ca6"} />
-      </svg>
+      <Image alt="" aria-hidden="true" height={28} src="/brand/trialrun.svg" width={28} />
       <span>trialrun</span>
     </Link>
   );

@@ -11,6 +11,23 @@ import type { ReviewSide, SourceWorkspace } from "./types";
 const shaSchema = z.string().regex(/^[0-9a-f]{40}$/);
 const pullNumberSchema = z.number().int().positive().safe();
 
+class GitCommandError extends Error {
+  readonly githubRepositoryNotFound: boolean;
+
+  constructor(message: string, githubRepositoryNotFound: boolean) {
+    super(message);
+    this.name = "GitCommandError";
+    this.githubRepositoryNotFound = githubRepositoryNotFound;
+  }
+}
+
+export class RetryableGitHubSourceAccessError extends Error {
+  constructor() {
+    super("GitHub temporarily reported that the installed private repository was unavailable.");
+    this.name = "RetryableGitHubSourceAccessError";
+  }
+}
+
 async function runGit(
   args: readonly string[],
   workingDirectory?: string,
@@ -39,7 +56,12 @@ async function runGit(
       else {
         const safeError = redactText(stderr, options.redactionValues ?? []);
         rejectOutput(
-          new Error(`git ${args[0] ?? "command"} exited with ${code ?? signal}: ${safeError}`),
+          new GitCommandError(
+            `git ${args[0] ?? "command"} exited with ${code ?? signal}: ${safeError}`,
+            safeError
+              .split(/\r?\n/u)
+              .some((line) => line.trim() === "remote: Repository not found."),
+          ),
         );
       }
     });
@@ -228,11 +250,18 @@ esac
       await mkdir(directory, { recursive: false });
       await runGit(["init", "--quiet"], directory, gitOptions);
       await runGit(["remote", "add", "origin", remoteUrl], directory, gitOptions);
-      await runGit(
-        ["fetch", "--quiet", "--no-tags", "--depth=1", "origin", fetchRevision],
-        directory,
-        gitOptions,
-      );
+      try {
+        await runGit(
+          ["fetch", "--quiet", "--no-tags", "--depth=1", "origin", fetchRevision],
+          directory,
+          gitOptions,
+        );
+      } catch (error) {
+        if (error instanceof GitCommandError && error.githubRepositoryNotFound) {
+          throw new RetryableGitHubSourceAccessError();
+        }
+        throw error;
+      }
       await runGit(["checkout", "--quiet", "--detach", "FETCH_HEAD"], directory, gitOptions);
       const checkedOut = await runGit(["rev-parse", "HEAD"], directory, gitOptions);
       if (checkedOut !== sha) throw new Error(`${name} checkout did not match its requested SHA.`);

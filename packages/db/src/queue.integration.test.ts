@@ -3,15 +3,24 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { applyInfrastructurePolicy } from "@trialrun/domain";
+import { applyInfrastructurePolicy, type ReviewStatus } from "@trialrun/domain";
 
 import { createDatabase, type TrialRunDatabase } from "./client";
-import { claimNextJob, enqueueReviewJob, recoverExpiredJobs, succeedJob } from "./queue";
+import {
+  claimNextJob,
+  enqueueReviewJob,
+  failJob,
+  recoverExpiredJobs,
+  requestReviewCancellation,
+  succeedJob,
+  transitionReview,
+} from "./queue";
 import {
   githubInstallations,
   jobs,
   repositories,
   repositoryRecipes,
+  reviewEvents,
   reviews,
   users,
 } from "./schema";
@@ -28,7 +37,7 @@ let repositoryId = "";
 let recipeId = "";
 let nextPullNumber = 1;
 
-async function createReview(status: "queued" | "provisioning" = "queued"): Promise<string> {
+async function createReview(status: ReviewStatus = "queued"): Promise<string> {
   const [review] = await db
     .insert(reviews)
     .values({
@@ -200,6 +209,14 @@ describe("durable review queue", () => {
       .returning({ id: jobs.id });
     if (!exhausted || !retryable) throw new Error("Lease fixtures were not inserted.");
 
+    expect(
+      await requestReviewCancellation(
+        db,
+        retryableReviewId,
+        "Cancellation requested before lease recovery",
+      ),
+    ).toBe(true);
+
     expect(await recoverExpiredJobs(db)).toBe(2);
     const [exhaustedAfter] = await db.select().from(jobs).where(eq(jobs.id, exhausted.id)).limit(1);
     const [retryableAfter] = await db.select().from(jobs).where(eq(jobs.id, retryable.id)).limit(1);
@@ -210,7 +227,32 @@ describe("durable review queue", () => {
     const [exhaustedReview] = await db.select().from(reviews).where(eq(reviews.id, exhaustedReviewId));
     const [retryableReview] = await db.select().from(reviews).where(eq(reviews.id, retryableReviewId));
     expect(exhaustedReview?.status).toBe("inconclusive");
-    expect(retryableReview?.status).toBe("inconclusive");
+    expect(retryableReview?.status).toBe("cancelled");
+  });
+
+  it("preserves cancellation when a claimed job fails", async () => {
+    const reviewId = await createReview("provisioning");
+    const [job] = await db
+      .insert(jobs)
+      .values({
+        reviewId,
+        kind: "run_review",
+        status: "running",
+        attempts: 1,
+        maxAttempts: 3,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        lockedBy: "failing-runner",
+      })
+      .returning();
+    if (!job) throw new Error("Failing job fixture was not inserted.");
+
+    expect(
+      await requestReviewCancellation(db, reviewId, "Cancellation requested before failure"),
+    ).toBe(true);
+    await failJob(db, job, "failing-runner", "simulated failure");
+
+    const [review] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1);
+    expect(review).toMatchObject({ status: "cancelled", verdict: "inconclusive" });
   });
 
   it("refuses to execute a stale job for an already-started review", async () => {
@@ -221,5 +263,60 @@ describe("durable review queue", () => {
     const [job] = await db.select().from(jobs).where(eq(jobs.reviewId, reviewId)).limit(1);
     expect(job?.status).toBe("failed");
     expect(job?.lastError).toContain("stale job");
+  });
+
+  it("turns a requested terminal transition into cancelled under the row lock", async () => {
+    const reviewId = await createReview("tearing_down");
+
+    expect(
+      await requestReviewCancellation(db, reviewId, "Cancellation requested from test"),
+    ).toBe(true);
+    expect(await transitionReview(db, reviewId, "completed", "Review completed")).toBe(
+      "cancelled",
+    );
+
+    const [review] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1);
+    expect(review).toMatchObject({
+      status: "cancelled",
+      verdict: "inconclusive",
+      statusMessage: "Review cancelled after evidence preservation and cleanup",
+    });
+    const [event] = await db
+      .select()
+      .from(reviewEvents)
+      .where(eq(reviewEvents.reviewId, reviewId))
+      .orderBy(reviewEvents.createdAt)
+      .limit(1);
+    expect(event).toMatchObject({
+      type: "status.cancelled",
+      message: "Review cancelled after evidence preservation and cleanup",
+    });
+  });
+
+  it("does not add cancellation intent to a terminal review", async () => {
+    const reviewId = await createReview("completed");
+
+    expect(
+      await requestReviewCancellation(db, reviewId, "Cancellation arrived too late"),
+    ).toBe(false);
+
+    const [review] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1);
+    expect(review?.status).toBe("completed");
+    expect(review?.cancelRequestedAt).toBeNull();
+  });
+
+  it("serializes a cancellation racing terminal completion", async () => {
+    const reviewId = await createReview("tearing_down");
+
+    const [cancellationAccepted, actualStatus] = await Promise.all([
+      requestReviewCancellation(db, reviewId, "Cancellation raced completion"),
+      transitionReview(db, reviewId, "completed", "Review completed"),
+    ]);
+
+    const [review] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1);
+    expect(actualStatus).toBe(cancellationAccepted ? "cancelled" : "completed");
+    expect(review?.status).toBe(actualStatus);
+    expect(review?.cancelRequestedAt !== null).toBe(cancellationAccepted);
+    if (cancellationAccepted) expect(review?.verdict).toBe("inconclusive");
   });
 });

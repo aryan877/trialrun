@@ -93,6 +93,37 @@ export async function heartbeatJob(
   return Boolean(job);
 }
 
+export async function isReviewCancellationRequested(
+  db: TrialRunDatabase,
+  reviewId: string,
+): Promise<boolean> {
+  const [review] = await db
+    .select({ cancelRequestedAt: reviews.cancelRequestedAt })
+    .from(reviews)
+    .where(eq(reviews.id, reviewId))
+    .limit(1);
+  if (!review) throw new Error(`Review ${reviewId} does not exist.`);
+  return review.cancelRequestedAt !== null;
+}
+
+export async function requestReviewCancellation(
+  db: TrialRunDatabase,
+  reviewId: string,
+  message: string,
+): Promise<boolean> {
+  const [review] = await db
+    .update(reviews)
+    .set({ cancelRequestedAt: new Date(), statusMessage: message })
+    .where(
+      and(
+        eq(reviews.id, reviewId),
+        notInArray(reviews.status, ["completed", "inconclusive", "cancelled"]),
+      ),
+    )
+    .returning({ id: reviews.id });
+  return Boolean(review);
+}
+
 export async function succeedJob(db: TrialRunDatabase, jobId: string, runnerId: string): Promise<void> {
   const [succeeded] = await db
     .update(jobs)
@@ -110,12 +141,15 @@ export async function failJob(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [review] = await tx
-      .select({ status: reviews.status })
+      .select({ status: reviews.status, cancelRequestedAt: reviews.cancelRequestedAt })
       .from(reviews)
       .where(eq(reviews.id, job.reviewId))
       .limit(1)
       .for("update");
-    const retry = review?.status === "queued" && job.attempts < job.maxAttempts;
+    const retry =
+      review?.status === "queued" &&
+      review.cancelRequestedAt === null &&
+      job.attempts < job.maxAttempts;
     await tx
       .update(jobs)
       .set({
@@ -130,22 +164,27 @@ export async function failJob(
       .where(and(eq(jobs.id, job.id), eq(jobs.status, "running"), eq(jobs.lockedBy, runnerId)));
     if (
       review &&
-      review.status !== "queued" &&
+      !retry &&
       !["completed", "inconclusive", "cancelled"].includes(review.status)
     ) {
+      const cancelled = review.cancelRequestedAt !== null;
+      const terminalStatus = cancelled ? "cancelled" : "inconclusive";
+      const terminalMessage = cancelled
+        ? "Review cancelled after the runner stopped; cleanup reconciliation is required."
+        : "Runner failed after work began; cleanup reconciliation is required.";
       await tx
         .update(reviews)
         .set({
-          status: "inconclusive",
+          status: terminalStatus,
           verdict: "inconclusive",
-          statusMessage: "Runner failed after work began; cleanup reconciliation is required.",
+          statusMessage: terminalMessage,
           completedAt: new Date(),
         })
         .where(eq(reviews.id, job.reviewId));
       await tx.insert(reviewEvents).values({
         reviewId: job.reviewId,
-        type: "status.inconclusive",
-        message: "Runner failed after work began; cleanup reconciliation is required.",
+        type: `status.${terminalStatus}`,
+        message: terminalMessage,
         payload: { jobId: job.id },
       });
     }
@@ -166,6 +205,24 @@ export async function recoverExpiredJobs(db: TrialRunDatabase): Promise<number> 
 
     const jobIds = expired.map(({ id }) => id);
     const reviewIds = [...new Set(expired.map(({ reviewId }) => reviewId))];
+    const affectedReviews = await tx
+      .select({
+        id: reviews.id,
+        status: reviews.status,
+        cancelRequestedAt: reviews.cancelRequestedAt,
+      })
+      .from(reviews)
+      .where(inArray(reviews.id, reviewIds))
+      .for("update");
+    const terminalizable = affectedReviews.filter(
+      ({ status }) => !["completed", "inconclusive", "cancelled"].includes(status),
+    );
+    const cancelledReviewIds = terminalizable
+      .filter(({ cancelRequestedAt }) => cancelRequestedAt !== null)
+      .map(({ id }) => id);
+    const inconclusiveReviewIds = terminalizable
+      .filter(({ cancelRequestedAt }) => cancelRequestedAt === null)
+      .map(({ id }) => id);
     await tx
       .update(jobs)
       .set({
@@ -175,28 +232,41 @@ export async function recoverExpiredJobs(db: TrialRunDatabase): Promise<number> 
         lastError: "Runner lease expired after work may have begun; automatic replay is unsafe.",
       })
       .where(inArray(jobs.id, jobIds));
-    await tx
-      .update(reviews)
-      .set({
-        status: "inconclusive",
-        verdict: "inconclusive",
-        statusMessage: "Runner lease expired; cleanup reconciliation is required.",
-        completedAt: now,
-      })
-      .where(
-        and(
-          inArray(reviews.id, reviewIds),
-          notInArray(reviews.status, ["completed", "inconclusive", "cancelled"]),
-        ),
+    if (inconclusiveReviewIds.length > 0) {
+      await tx
+        .update(reviews)
+        .set({
+          status: "inconclusive",
+          verdict: "inconclusive",
+          statusMessage: "Runner lease expired; cleanup reconciliation is required.",
+          completedAt: now,
+        })
+        .where(inArray(reviews.id, inconclusiveReviewIds));
+    }
+    if (cancelledReviewIds.length > 0) {
+      await tx
+        .update(reviews)
+        .set({
+          status: "cancelled",
+          verdict: "inconclusive",
+          statusMessage: "Review cancellation was preserved after the runner lease expired.",
+          completedAt: now,
+        })
+        .where(inArray(reviews.id, cancelledReviewIds));
+    }
+    if (terminalizable.length > 0) {
+      await tx.insert(reviewEvents).values(
+        terminalizable.map(({ id: reviewId, cancelRequestedAt }) => ({
+          reviewId,
+          type: "runner.lease_expired",
+          message:
+            cancelRequestedAt === null
+              ? "Runner lease expired; automatic replay was refused and cleanup reconciliation is required."
+              : "Runner lease expired after cancellation; cancellation intent was preserved and cleanup reconciliation is required.",
+          payload: {},
+        })),
       );
-    await tx.insert(reviewEvents).values(
-      reviewIds.map((reviewId) => ({
-        reviewId,
-        type: "runner.lease_expired",
-        message: "Runner lease expired; automatic replay was refused and cleanup reconciliation is required.",
-        payload: {},
-      })),
-    );
+    }
     return expired.length;
   });
 }
@@ -216,10 +286,10 @@ export async function transitionReview(
   reviewId: string,
   to: ReviewStatus,
   message: string,
-): Promise<void> {
-  await db.transaction(async (tx) => {
+): Promise<ReviewStatus> {
+  return db.transaction(async (tx) => {
     const [current] = await tx
-      .select({ status: reviews.status })
+      .select({ status: reviews.status, cancelRequestedAt: reviews.cancelRequestedAt })
       .from(reviews)
       .where(eq(reviews.id, reviewId))
       .limit(1)
@@ -230,15 +300,32 @@ export async function transitionReview(
     if (!canTransitionReview(current.status, to)) {
       throw new Error(`Invalid review transition: ${current.status} -> ${to}.`);
     }
+    const actualStatus =
+      current.cancelRequestedAt && (to === "completed" || to === "inconclusive")
+        ? ("cancelled" as const)
+        : to;
+    const actualMessage =
+      actualStatus === "cancelled" && to !== "cancelled"
+        ? "Review cancelled after evidence preservation and cleanup"
+        : message;
     await tx
       .update(reviews)
       .set({
-        status: to,
-        statusMessage: message,
+        status: actualStatus,
+        statusMessage: actualMessage,
+        verdict: actualStatus === "cancelled" ? "inconclusive" : undefined,
         startedAt: current.status === "queued" ? new Date() : undefined,
-        completedAt: ["completed", "inconclusive", "cancelled"].includes(to) ? new Date() : undefined,
+        completedAt: ["completed", "inconclusive", "cancelled"].includes(actualStatus)
+          ? new Date()
+          : undefined,
       })
       .where(eq(reviews.id, reviewId));
-    await tx.insert(reviewEvents).values({ reviewId, type: `status.${to}`, message, payload: {} });
+    await tx.insert(reviewEvents).values({
+      reviewId,
+      type: `status.${actualStatus}`,
+      message: actualMessage,
+      payload: {},
+    });
+    return actualStatus;
   });
 }

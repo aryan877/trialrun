@@ -34,7 +34,11 @@ async function createBundle(directory: string): Promise<void> {
   await chmod(join(directory, "node_modules/.bin/tsx"), 0o755);
   await writeFile(
     join(directory, "node_modules/@trialrun/executor/package.json"),
-    JSON.stringify({ name: "@trialrun/executor", version: "0.1.0" }),
+    JSON.stringify({
+      name: "@trialrun/executor",
+      version: "0.1.0",
+      dependencies: { playwright: "1.62.1" },
+    }),
   );
 }
 
@@ -66,7 +70,11 @@ describe("validateExecutorSourceBundle", () => {
     await mkdir(executorTarget, { recursive: true });
     await writeFile(
       join(executorTarget, "package.json"),
-      JSON.stringify({ name: "@trialrun/executor", version: "0.1.0" }),
+      JSON.stringify({
+        name: "@trialrun/executor",
+        version: "0.1.0",
+        dependencies: { playwright: "1.62.1" },
+      }),
     );
     await rm(join(directory, "node_modules/.bin/tsx"));
     await rm(join(directory, "node_modules/@trialrun/executor"), { recursive: true });
@@ -137,6 +145,23 @@ describe("validateExecutorSourceBundle", () => {
 
     expect(() => validateExecutorSourceBundle(directory)).toThrow(
       "package.json must declare @trialrun/executor in dependencies",
+    );
+  });
+
+  it("rejects a bundle whose Playwright version can drift from Chromium", async () => {
+    const directory = await temporaryDirectory();
+    await createBundle(directory);
+    await writeFile(
+      join(directory, "node_modules/@trialrun/executor/package.json"),
+      JSON.stringify({
+        name: "@trialrun/executor",
+        version: "0.1.0",
+        dependencies: { playwright: "1.61.1" },
+      }),
+    );
+
+    expect(() => validateExecutorSourceBundle(directory)).toThrow(
+      "must identify @trialrun/executor and pin playwright 1.62.1",
     );
   });
 });

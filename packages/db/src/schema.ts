@@ -24,7 +24,6 @@ import type {
   InfrastructurePolicyDecision,
   InfrastructureProposal,
   PolicyApprovedRecipe,
-  TestPlan,
 } from "@trialrun/domain";
 
 const createdAt = timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -488,7 +487,7 @@ export const reviews = pgTable(
     verdict: reviewVerdictEnum("verdict"),
     provider: executionProviderEnum("provider").notNull(),
     statusMessage: text("status_message").notNull().default("Waiting for a runner"),
-    plan: jsonb("plan").$type<TestPlan>(),
+    plan: jsonb("plan"),
     agentConnectionId: uuid("agent_connection_id").references(() => agentConnections.id, {
       onDelete: "set null",
     }),

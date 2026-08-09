@@ -13,6 +13,9 @@ const runnerManifestSchema = z.object({
 
 const executorManifestSchema = z.object({
   name: z.literal("@trialrun/executor"),
+  dependencies: z.object({
+    playwright: z.literal("1.62.1"),
+  }),
 });
 
 function fail(directory: string, problem: string): never {
@@ -125,7 +128,7 @@ export function validateExecutorSourceBundle(configuredDirectory: string): strin
   if (!executorManifest.success) {
     fail(
       directory,
-      "node_modules/@trialrun/executor/package.json must identify @trialrun/executor",
+      "node_modules/@trialrun/executor/package.json must identify @trialrun/executor and pin playwright 1.62.1",
     );
   }
 

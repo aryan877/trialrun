@@ -3,7 +3,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import type { Transport, TransportSendOptions } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type {
+  Transport,
+  TransportSendOptions,
+} from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import {
   testAssertionSchema,
@@ -15,6 +18,8 @@ import {
 } from "@trialrun/domain";
 import { z } from "zod";
 
+import { findCapturedLiveArtifact, liveEvidenceAgentHandoff } from "./live-artifact";
+import { liveApiAssertionSchema, liveApiRequestSchema } from "./live-api";
 import { LiveBrowserError, type LiveBrowserSession } from "./live-browser";
 
 const sideSchema = z.enum(["base", "head"]);
@@ -25,6 +30,7 @@ const checkpointNameSchema = z
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
   .max(80);
 const artifactIdSchema = z.string().regex(/^artifact:[0-9a-f]{64}$/);
+const responseIdSchema = z.string().regex(/^response:[0-9a-f]{64}$/);
 
 const maximumRequestBytes = 128 * 1_024;
 
@@ -139,9 +145,7 @@ function toolResult(value: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
     structuredContent:
-      value !== null && typeof value === "object"
-        ? (value as Record<string, unknown>)
-        : { value },
+      value !== null && typeof value === "object" ? (value as Record<string, unknown>) : { value },
   };
 }
 
@@ -173,9 +177,9 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
         `You are controlling the two live applications for TrialRun review ${reviewId}.`,
         "Always observe before acting, use the returned observationId, and use semantic locators.",
         "Every click/fill/select/press is rejected unless its locator resolves to exactly one element.",
-        "Use the same checkpoint name on base and head only when they represent the same product state.",
-        "For a verdict, record at least two same-name, same-path assertion pairs: one URL assertion and one product-behavior assertion with the identical semantic locator on both sides.",
-        "Do not claim a verdict. Finish only after recording the strongest available matched evidence.",
+        "Use either application or both as the investigation requires. Assertions and checkpoints record facts; they do not impose a fixed test shape.",
+        "When the repository exposes relevant HTTP endpoints, request only the fixed base/head application origins. Reuse browser-session cookies or approved named test secrets when needed.",
+        "You decide what the evidence means in your terminal review. Finish when the investigation is complete, then cite only IDs that were actually recorded.",
       ].join(" "),
     },
   );
@@ -187,6 +191,53 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     () => toolResult(session.status()),
+  );
+
+  server.registerTool(
+    "api_request",
+    {
+      description:
+        "Send one bounded HTTP request to a fixed base or head application origin. Paths are relative, redirects are not followed, browser-session cookies are attached internally, and named test secrets are resolved only inside the executor.",
+      inputSchema: {
+        side: sideSchema,
+        name: checkpointNameSchema,
+        request: liveApiRequestSchema,
+      },
+      annotations: { destructiveHint: true, openWorldHint: false },
+    },
+    async ({ side, name, request }, extra) =>
+      callTool(() => session.apiRequest({ side, name, request, signal: extra.signal })),
+  );
+
+  server.registerTool(
+    "api_request_pair",
+    {
+      description:
+        "Send the exact same bounded HTTP request to base and head, then record both redacted responses as one convenient comparison step.",
+      inputSchema: { name: checkpointNameSchema, request: liveApiRequestSchema },
+      annotations: { destructiveHint: true, openWorldHint: false },
+    },
+    async ({ name, request }, extra) =>
+      callTool(() => session.apiRequestPair({ name, request, signal: extra.signal })),
+  );
+
+  server.registerTool(
+    "api_assert",
+    {
+      description:
+        "Record a deterministic status, body-text, or JSON-scalar fact against one captured API response.",
+      inputSchema: {
+        side: sideSchema,
+        name: checkpointNameSchema,
+        responseId: responseIdSchema,
+        assertion: liveApiAssertionSchema,
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ side, name, responseId, assertion }, extra) =>
+      callTool(() =>
+        session.apiAssert({ side, name, responseId, assertion, signal: extra.signal }),
+      ),
   );
 
   server.registerTool(
@@ -207,7 +258,10 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
         "Navigate one side to a relative same-origin path. Caller-supplied origins and external URLs are forbidden.",
       inputSchema: {
         side: sideSchema,
-        path: z.string().regex(/^\/(?!\/).*/).max(2_000),
+        path: z
+          .string()
+          .regex(/^\/(?!\/).*/)
+          .max(2_000),
         waitUntil: testNavigationWaitUntilSchema.optional(),
       },
       annotations: { destructiveHint: false, openWorldHint: false },
@@ -269,9 +323,7 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
       annotations: { destructiveHint: false, openWorldHint: false },
     },
     async ({ side, observationId, locator, value }, extra) =>
-      callTool(() =>
-        session.fill({ side, observationId, locator, value, signal: extra.signal }),
-      ),
+      callTool(() => session.fill({ side, observationId, locator, value, signal: extra.signal })),
   );
 
   server.registerTool(
@@ -313,12 +365,10 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
     "browser_assert",
     {
       description:
-        "Record a deterministic visibility, text, or URL assertion. The external oracle—not the agent—uses assertion evidence for the final verdict.",
+        "Record a deterministic visibility, text, or URL fact on either running application.",
       inputSchema: {
         side: sideSchema,
-        name: checkpointNameSchema.describe(
-          "Stable comparison name; use the same name on base and head only for the same assertion.",
-        ),
+        name: checkpointNameSchema.describe("Stable name for this recorded fact."),
         assertion: testAssertionSchema,
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -331,12 +381,24 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
     "browser_checkpoint",
     {
       description:
-        "Record a named product-state checkpoint and capture a screenshot when the side has not handled a named secret.",
+        "Record one side of a named journey-moment checkpoint. Use the identical name on base and head even when the visible outcomes differ.",
       inputSchema: { side: sideSchema, name: checkpointNameSchema },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ side, name }, extra) =>
       callTool(() => session.checkpoint({ side, name, signal: extra.signal })),
+  );
+
+  server.registerTool(
+    "browser_checkpoint_pair",
+    {
+      description:
+        "Capture base and head screenshots for the same current journey moment under one identical comparison name.",
+      inputSchema: { name: checkpointNameSchema },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ name }, extra) =>
+      callTool(() => session.checkpointPair({ name, signal: extra.signal })),
   );
 
   server.registerTool(
@@ -348,9 +410,7 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ side, cursor }, extra) =>
-      callTool(() =>
-        session.events({ side, ...(cursor ? { cursor } : {}), signal: extra.signal }),
-      ),
+      callTool(() => session.events({ side, ...(cursor ? { cursor } : {}), signal: extra.signal })),
   );
 
   server.registerTool(
@@ -374,13 +434,16 @@ function createReviewMcpServer(session: LiveBrowserSession, reviewId: string): M
     async () =>
       callTool(async () => {
         const evidence = await session.seal("finished");
+        const handoff = liveEvidenceAgentHandoff(evidence);
         return {
           status: evidence.status,
           evidenceEntries: evidence.ledger.length,
+          observations: evidence.observations.length,
           assertions: evidence.assertions.length,
-          matchedAssertionNames: evidence.matchedAssertionNames,
           checkpoints: evidence.checkpoints.length,
-          matchedCheckpointNames: evidence.matchedCheckpointNames,
+          apiResponses: evidence.apiResponses.length,
+          recordings: evidence.recordings.filter(({ captured }) => captured).length,
+          availableEvidenceIds: handoff.availableEvidenceIds,
           browserEvents: evidence.events.length,
         };
       }),
@@ -413,7 +476,10 @@ export async function startLiveBrowserServer(
     const address = request.socket.remoteAddress ?? "unknown";
     const now = Date.now();
     const existing = failures.get(address);
-    const window = !existing || existing.resetAt <= now ? { count: 0, resetAt: now + failureWindowMs } : existing;
+    const window =
+      !existing || existing.resetAt <= now
+        ? { count: 0, resetAt: now + failureWindowMs }
+        : existing;
     if (window.count >= maximumFailuresPerWindow) {
       response.setHeader("Retry-After", Math.max(1, Math.ceil((window.resetAt - now) / 1_000)));
       json(response, 429, { error: "Too many failed authentication attempts." });
@@ -433,7 +499,10 @@ export async function startLiveBrowserServer(
   };
 
   let closing = false;
-  const handleRequest = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+  const handleRequest = async (
+    request: IncomingMessage,
+    response: ServerResponse,
+  ): Promise<void> => {
     response.setHeader("Cache-Control", "no-store");
     response.setHeader("X-Content-Type-Options", "nosniff");
     try {
@@ -466,19 +535,19 @@ export async function startLiveBrowserServer(
       if (request.method === "GET" && url.pathname.startsWith("/artifacts/")) {
         const artifactId = artifactIdSchema.parse(decodeURIComponent(url.pathname.slice(11)));
         const bytes = options.session.artifact(artifactId);
-        const checkpoint = options.session
-          .evidence()
-          .checkpoints.find((candidate) => candidate.artifactId === artifactId);
-        if (!checkpoint?.digest || checkpoint.byteSize !== bytes.byteLength) {
+        const artifact = findCapturedLiveArtifact(options.session.evidence(), artifactId);
+        const digest = createHash("sha256").update(bytes).digest("hex");
+        if (artifact.byteSize !== bytes.byteLength || artifact.digest !== digest) {
           throw new Error("Sealed artifact metadata does not match its bytes.");
         }
+        const extension = artifact.mediaType === "video/webm" ? "webm" : "png";
         response.writeHead(200, {
           "Cache-Control": "no-store",
-          "Content-Disposition": `attachment; filename="${artifactId.replace(":", "-")}.png"`,
+          "Content-Disposition": `attachment; filename="${artifactId.replace(":", "-")}.${extension}"`,
           "Content-Length": bytes.byteLength,
           "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
-          "Content-Type": "image/png",
-          Digest: `sha-256=${Buffer.from(checkpoint.digest, "hex").toString("base64")}`,
+          "Content-Type": artifact.mediaType,
+          Digest: `sha-256=${Buffer.from(artifact.digest, "hex").toString("base64")}`,
           "X-Content-Type-Options": "nosniff",
         });
         response.end(bytes);
