@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 460" role="img" aria-labelledby="architecture-title architecture-description" preserveAspectRatio="xMidYMid meet" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 520" role="img" aria-labelledby="architecture-title architecture-description" preserveAspectRatio="xMidYMid meet" font-family="Instrument Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
   <title id="architecture-title">One PR in. A tested review out.</title>
   <desc id="architecture-description">A six-step TrialRun review. GitHub sends the exact base and pull request commits. Codex reads the repository while TrialRun checks the run plan and limits. Zerops boots isolated base and pull request applications with separate data. Codex tests the code, user interface, and API in live Chrome while TrialRun records real video and evidence. TrialRun deletes the exact temporary project, confirms it is gone, and only then publishes Codex&apos;s verdict to GitHub.</desc>
   <defs>
@@ -78,101 +78,87 @@
 </symbol>
 <symbol id="architecture-logo-chrome" viewBox="0 0 63 63" preserveAspectRatio="xMidYMid meet"><linearGradient id="architecture-logo-chrome-a" gradientUnits="userSpaceOnUse" x1="34.9087" x2="7.63224" y1="61.029" y2="13.7847"><stop offset="0" stop-color="#1e8e3e"/><stop offset="1" stop-color="#34a853"/></linearGradient><linearGradient id="architecture-logo-chrome-b" gradientUnits="userSpaceOnUse" x1="26.9043" x2="54.1808" y1="63.0788" y2="15.8345"><stop offset="0" stop-color="#fcc934"/><stop offset="1" stop-color="#fbbc04"/></linearGradient><linearGradient id="architecture-logo-chrome-c" gradientUnits="userSpaceOnUse" x1="4.22145" x2="58.7745" y1="19.6884" y2="19.6884"><stop offset="0" stop-color="#d93025"/><stop offset="1" stop-color="#ea4335"/></linearGradient><path d="m31.499 47.2466c8.6985 0 15.75-7.0515 15.75-15.75s-7.0515-15.75-15.75-15.75-15.75 7.0515-15.75 15.75 7.0515 15.75 15.75 15.75z" fill="#fff"/><path d="m17.8591 39.3751-13.63772-23.6212c-2.76527 4.788-4.22118922 10.2197-4.22137998 15.7489s1.45535998 10.961 4.22028998 15.7492c2.76494 4.7882 6.74181 8.7641 11.53071 11.5279 4.7889 2.7637 10.221 4.2179 15.7502 4.2164l13.6377-23.6212v-.0041c-1.3813 2.3954-3.369 4.3848-5.7632 5.7681s-5.1104 2.1118-7.8755 2.1122-5.4816-.7272-7.8762-2.1099c-2.3945-1.3826-4.3829-3.3714-5.7649-5.7663z" fill="url(#architecture-logo-chrome-a)"/><path d="m45.1379 39.3741-13.6376 23.6212c5.5292.0008 10.9611-1.4542 15.7496-4.2187 4.7885-2.7644 8.7648-6.7408 11.5291-11.5294 2.7642-4.7887 4.219-10.2207 4.2181-15.7499-.001-5.5292-1.4577-10.9606-4.2237-15.7483h-27.2754l-.0034.0021c2.7651-.0014 5.4818.7254 7.8769 2.1071 2.3951 1.3818 4.3841 3.3698 5.767 5.7643 1.3829 2.3944 2.1109 5.1108 2.1109 7.8758-.0001 2.7651-.7283 5.4814-2.1113 7.8758z" fill="url(#architecture-logo-chrome-b)"/><path d="m31.499 43.9688c6.8863 0 12.4688-5.5825 12.4688-12.4688s-5.5825-12.4688-12.4688-12.4688-12.4687 5.5825-12.4687 12.4688 5.5824 12.4688 12.4687 12.4688z" fill="#1a73e8"/><path d="m31.4991 15.75h27.2754c-2.764-4.7888-6.74-8.76553-11.5283-11.53029-4.7883-2.76475-10.2202-4.22010235-15.7494-4.21970992s-10.9608 1.45650992-15.7487 4.22194992c-4.788 2.76543-8.76341 6.74275-11.52666 11.53185l13.63766 23.6212.0035.0019c-1.3837-2.394-2.1127-5.11-2.1136-7.8751s.7264-5.4817 2.1086-7.8765c1.3821-2.3948 3.3706-4.3835 5.7652-5.7659 2.3947-1.3825 5.1112-2.11 7.8763-2.1094z" fill="url(#architecture-logo-chrome-c)"/></symbol>
   </defs>
-  <rect width="1200" height="460" fill="#fbfbf8" />
-  <text data-canvas-title="true" data-geometry-owner="canvas-title" x="40" y="54" font-size="32" font-weight="750" fill="#111111">One PR in. A tested review out.</text>
-  <text data-canvas-subtitle="true" data-geometry-owner="canvas-subtitle" x="40" y="86" font-size="16" fill="#5f5f59">Codex reads the code and tests both live commits. Zerops deletes the lab before GitHub gets the verdict.</text>
-  <g data-zone-id="source-zone">
-        <rect x="40" y="130" width="170" height="250" rx="18" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
-        <text data-zone-text="title" data-geometry-owner="zone:source-zone" x="58" y="159" font-size="16" font-weight="700" fill="#111111">1 — GitHub</text>
-        <text data-zone-text="subtitle" data-geometry-owner="zone:source-zone" x="58" y="180" font-size="13" fill="#5f5f59">pull request</text>
-      </g>
-<g data-zone-id="control-zone">
-        <rect x="240" y="130" width="170" height="250" rx="18" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
-        <text data-zone-text="title" data-geometry-owner="zone:control-zone" x="258" y="159" font-size="16" font-weight="700" fill="#111111">2 — TrialRun</text>
-        <text data-zone-text="subtitle" data-geometry-owner="zone:control-zone" x="258" y="180" font-size="13" fill="#5f5f59">prepare safely</text>
-      </g>
-<g data-zone-id="review-zone">
-        <rect x="440" y="130" width="500" height="250" rx="18" fill="#f4f4f0" stroke="#2357ff" stroke-width="2" />
-        <text data-zone-text="title" data-geometry-owner="zone:review-zone" x="458" y="159" font-size="16" font-weight="700" fill="#111111">3–5 — Zerops</text>
-        <text data-zone-text="subtitle" data-geometry-owner="zone:review-zone" x="458" y="180" font-size="13" fill="#5f5f59">one disposable live lab</text>
-      </g>
-<g data-zone-id="proof-zone">
-        <rect x="970" y="130" width="190" height="250" rx="18" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
-        <text data-zone-text="title" data-geometry-owner="zone:proof-zone" x="988" y="159" font-size="16" font-weight="700" fill="#111111">6 — GitHub</text>
-        <text data-zone-text="subtitle" data-geometry-owner="zone:proof-zone" x="988" y="180" font-size="13" fill="#5f5f59">proof after cleanup</text>
-      </g>
-  <g data-connector-id="pr-to-runner" data-connector-mode="active">
-      <path d="M 195 280 L 255 280" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
-    </g>
-<g data-connector-id="runner-to-apps" data-connector-mode="active">
-      <path d="M 395 280 L 455 280" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
-    </g>
-<g data-connector-id="apps-to-codex" data-connector-mode="active">
-      <path d="M 600 280 L 620 280" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
-    </g>
-<g data-connector-id="codex-to-delete" data-connector-mode="active">
-      <path d="M 765 280 L 785 280" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-active)" />
-    </g>
-<g data-connector-id="delete-to-proof" data-connector-mode="evidence">
-      <path d="M 925 280 L 985 280" fill="none" stroke="#2357ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-evidence)" />
-    </g>
-  <g data-node-id="pull-request">
-      <rect x="55" y="210" width="140" height="140" rx="14" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
-      <g data-logo-asset="github" data-geometry-owner="node:pull-request">
-        <rect x="73" y="228" width="38" height="38" fill="transparent" />
-        <use href="#architecture-logo-github" x="73" y="228" width="38" height="38" />
-      </g>
-      <text data-node-text="title" data-geometry-owner="node:pull-request" x="73" y="292" font-size="18" font-weight="700" fill="#111111">PR in</text>
-      <text data-node-text="detail" data-geometry-owner="node:pull-request" x="73" y="322" font-size="15" fill="#5f5f59">two SHAs</text>
-    </g>
-<g data-node-id="runner">
-      <rect x="255" y="210" width="140" height="140" rx="14" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
-      <g data-logo-asset="trialrun" data-geometry-owner="node:runner">
-        <rect x="273" y="228" width="38" height="38" fill="transparent" />
-        <use href="#architecture-logo-trialrun" x="273" y="228" width="38" height="38" />
-      </g>
-      <text data-node-text="title" data-geometry-owner="node:runner" x="273" y="292" font-size="18" font-weight="700" fill="#111111">Plan repo</text>
-      <text data-node-text="detail" data-geometry-owner="node:runner" x="273" y="322" font-size="15" fill="#5f5f59">Codex reads</text>
-<text data-node-text="detail" data-geometry-owner="node:runner" x="273" y="344" font-size="15" fill="#5f5f59">limits pass</text>
-    </g>
-<g data-node-id="live-apps">
-      <rect x="455" y="210" width="145" height="140" rx="14" fill="#f4f4f0" stroke="#111111" stroke-width="2" />
-      <g data-logo-asset="zerops" data-geometry-owner="node:live-apps">
-        <rect x="473" y="228" width="38" height="38" fill="transparent" />
-        <use href="#architecture-logo-zerops" x="473" y="228" width="38" height="38" />
-      </g>
-      <text data-node-text="title" data-geometry-owner="node:live-apps" x="473" y="292" font-size="18" font-weight="700" fill="#111111">Boot both</text>
-      <text data-node-text="detail" data-geometry-owner="node:live-apps" x="473" y="322" font-size="15" fill="#5f5f59">base + PR</text>
-<text data-node-text="detail" data-geometry-owner="node:live-apps" x="473" y="344" font-size="15" fill="#5f5f59">split data</text>
-    </g>
-<g data-node-id="codex-review">
-      <rect x="620" y="210" width="145" height="140" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
-      <g data-logo-asset="chrome" data-geometry-owner="node:codex-review">
-        <rect x="638" y="228" width="38" height="38" fill="transparent" />
-        <use href="#architecture-logo-chrome" x="638" y="228" width="38" height="38" />
-      </g>
-      <text data-node-text="title" data-geometry-owner="node:codex-review" x="638" y="292" font-size="18" font-weight="700" fill="#111111">Test live</text>
-      <text data-node-text="detail" data-geometry-owner="node:codex-review" x="638" y="322" font-size="15" fill="#5f5f59">Codex live</text>
-<text data-node-text="detail" data-geometry-owner="node:codex-review" x="638" y="344" font-size="15" fill="#5f5f59">UI + API</text>
-    </g>
-<g data-node-id="delete-lab">
-      <rect x="785" y="210" width="140" height="140" rx="14" fill="#f4f4f0" stroke="#111111" stroke-width="2" />
-      <g data-logo-asset="zerops" data-geometry-owner="node:delete-lab">
-        <rect x="803" y="228" width="38" height="38" fill="transparent" />
-        <use href="#architecture-logo-zerops" x="803" y="228" width="38" height="38" />
-      </g>
-      <text data-node-text="title" data-geometry-owner="node:delete-lab" x="803" y="292" font-size="18" font-weight="700" fill="#111111">Delete</text>
-      <text data-node-text="detail" data-geometry-owner="node:delete-lab" x="803" y="322" font-size="15" fill="#5f5f59">exact ID</text>
-<text data-node-text="detail" data-geometry-owner="node:delete-lab" x="803" y="344" font-size="15" fill="#5f5f59">gone</text>
-    </g>
-<g data-node-id="published-proof">
-      <rect x="985" y="210" width="160" height="140" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
-      <g data-logo-asset="github" data-geometry-owner="node:published-proof">
-        <rect x="1003" y="228" width="38" height="38" fill="transparent" />
-        <use href="#architecture-logo-github" x="1003" y="228" width="38" height="38" />
-      </g>
-      <text data-node-text="title" data-geometry-owner="node:published-proof" x="1003" y="292" font-size="18" font-weight="700" fill="#111111">Post proof</text>
-      <text data-node-text="detail" data-geometry-owner="node:published-proof" x="1003" y="322" font-size="15" fill="#5f5f59">verdict</text>
-<text data-node-text="detail" data-geometry-owner="node:published-proof" x="1003" y="344" font-size="15" fill="#5f5f59">video</text>
-    </g>
+  <rect width="1200" height="520" fill="#fbfbf8" />
+  <text x="40" y="54" font-size="32" font-weight="750" fill="#111111">One live review, from exact commits to proof.</text>
+  <text x="40" y="86" font-size="16" fill="#5f5f59">Codex investigates. TrialRun records, removes the exact Zerops project, then publishes.</text>
+
+  <rect x="40" y="125" width="170" height="320" rx="18" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
+  <text x="58" y="157" font-size="16" font-weight="700" fill="#111111">GitHub</text>
+  <text x="58" y="179" font-size="13" fill="#5f5f59">source</text>
+
+  <rect x="240" y="125" width="180" height="320" rx="18" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
+  <text x="258" y="157" font-size="16" font-weight="700" fill="#111111">TrialRun</text>
+  <text x="258" y="179" font-size="13" fill="#5f5f59">control plane</text>
+
+  <rect x="450" y="125" width="510" height="320" rx="18" fill="#f4f4f0" stroke="#2357ff" stroke-width="2" />
+  <text x="468" y="157" font-size="16" font-weight="700" fill="#111111">Zerops</text>
+  <text x="468" y="179" font-size="13" fill="#5f5f59">one private, disposable review project</text>
+
+  <rect x="990" y="125" width="170" height="320" rx="18" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
+  <text x="1008" y="157" font-size="16" font-weight="700" fill="#111111">GitHub</text>
+  <text x="1008" y="179" font-size="13" fill="#5f5f59">published proof</text>
+
+  <path d="M195 295H255" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow-active)" />
+  <path d="M405 295H470" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow-active)" />
+  <path d="M620 295H640" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow-active)" />
+  <path d="M790 295H810" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow-active)" />
+  <path d="M940 295H1005" fill="none" stroke="#2357ff" stroke-width="2" marker-end="url(#arrow-evidence)" />
+
+  <g>
+    <rect x="55" y="205" width="140" height="180" rx="14" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
+    <use href="#architecture-logo-github" x="73" y="223" width="38" height="38" />
+    <text x="73" y="288" font-size="18" font-weight="700" fill="#111111">Exact PR</text>
+    <text x="73" y="319" font-size="14" fill="#5f5f59">base SHA</text>
+    <text x="73" y="343" font-size="14" fill="#5f5f59">head SHA</text>
+    <text x="73" y="367" font-size="14" fill="#5f5f59">full repository</text>
+  </g>
+
+  <g>
+    <rect x="255" y="205" width="150" height="180" rx="14" fill="#fbfbf8" stroke="#2357ff" stroke-width="2" />
+    <use href="#architecture-logo-trialrun" x="273" y="223" width="38" height="38" />
+    <text x="273" y="288" font-size="18" font-weight="700" fill="#111111">Pin review</text>
+    <text x="273" y="319" font-size="14" fill="#5f5f59">one Codex</text>
+    <text x="273" y="343" font-size="14" fill="#5f5f59">one job</text>
+    <text x="273" y="367" font-size="14" fill="#5f5f59">saved project ID</text>
+  </g>
+
+  <g>
+    <rect x="470" y="205" width="150" height="180" rx="14" fill="#fbfbf8" stroke="#111111" stroke-width="2" />
+    <use href="#architecture-logo-zerops" x="488" y="223" width="42" height="38" />
+    <text x="488" y="288" font-size="18" font-weight="700" fill="#111111">Boot both</text>
+    <text x="488" y="319" font-size="14" fill="#5f5f59">base app + data</text>
+    <text x="488" y="343" font-size="14" fill="#5f5f59">PR app + data</text>
+    <text x="488" y="367" font-size="14" fill="#5f5f59">private network</text>
+  </g>
+
+  <g>
+    <rect x="640" y="205" width="150" height="180" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
+    <use href="#architecture-logo-codex" x="658" y="223" width="38" height="38" />
+    <use href="#architecture-logo-chrome" x="704" y="223" width="38" height="38" />
+    <text x="658" y="288" font-size="18" font-weight="700" fill="#111111">Test live</text>
+    <text x="658" y="319" font-size="14" fill="#5f5f59">code + UI</text>
+    <text x="658" y="343" font-size="14" fill="#5f5f59">API + logs</text>
+    <text x="658" y="367" font-size="14" fill="#5f5f59">PNG + WebM</text>
+  </g>
+
+  <g>
+    <rect x="810" y="205" width="130" height="180" rx="14" fill="#fbfbf8" stroke="#ff3ca6" stroke-width="2" />
+    <use href="#architecture-logo-zerops" x="828" y="223" width="42" height="38" />
+    <text x="828" y="288" font-size="18" font-weight="700" fill="#111111">Delete</text>
+    <text x="828" y="319" font-size="14" fill="#5f5f59">saved ID</text>
+    <text x="828" y="343" font-size="14" fill="#5f5f59">process finished</text>
+    <text x="828" y="367" font-size="13" fill="#ff3ca6">projectNotFound</text>
+  </g>
+
+  <g>
+    <rect x="1005" y="205" width="140" height="180" rx="14" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
+    <use href="#architecture-logo-github" x="1023" y="223" width="38" height="38" />
+    <text x="1023" y="288" font-size="18" font-weight="700" fill="#111111">Post review</text>
+    <text x="1023" y="319" font-size="14" fill="#5f5f59">verdict + code</text>
+    <text x="1023" y="343" font-size="14" fill="#5f5f59">screens + video</text>
+    <text x="1023" y="367" font-size="14" fill="#5f5f59">hashes + cleanup</text>
+  </g>
+
+  <rect x="450" y="466" width="510" height="34" rx="10" fill="#111111" />
+  <text x="705" y="488" text-anchor="middle" font-size="14" font-weight="650" fill="#fbfbf8">Codex investigates. TrialRun guards, records and deletes.</text>
 </svg>

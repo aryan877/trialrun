@@ -20,55 +20,56 @@
 
 <!-- TRIALRUN_FINAL_PROOF_END -->
 
-## One PR. One live review.
+## It reads the code. Then it tests the product.
 
-1. **Understand it.** Codex explores the repository and diff, then decides how the app should run and what deserves testing.
-2. **Run it.** Zerops boots the exact base and PR commits as separate apps with separate data. No `zerops.yaml` required.
-3. **Prove it.** The same Codex session checks code, UI, APIs, logs, and failures live. TrialRun records the evidence, deletes the temporary Zerops project, and posts the verdict to GitHub.
+1. **Codex understands the change.** It searches the full repository, follows the code, and decides what needs to run and what could break.
+2. **Zerops boots both commits.** The base and PR run as separate live systems with separate data.
+3. **Codex tests its own theory.** It drives Chrome, calls the app's APIs, reads logs, and changes course when the app surprises it.
+4. **GitHub gets the proof.** TrialRun saves the evidence, deletes the exact Zerops project, and only then publishes Codex's review.
 
-## The loop in one diagram
+## No customer Zerops file
+
+![Codex explores the full exact commit, returns a cited typed run plan, TrialRun checks and compiles it, and Zerops runs isolated base and pull request systems](docs/assets/trialrun-planning.svg)
+
+Codex can search and read the full, exact commit. It follows entrypoints, build scripts, routes, database clients, and environment names until it knows what must run. TrialRun checks that answer against hard resource and security limits, then generates the Zerops input. The customer never writes `zerops.yaml`.
+
+## One PR gets one private lab
 
 ![A pull request enters TrialRun, Zerops boots the base and PR apps, Codex tests them in Chrome, Zerops deletes the temporary project, and GitHub receives the verdict and video](docs/assets/trialrun-architecture.svg)
 
-Codex owns the review and verdict. TrialRun owns the credentials, cloud lifecycle, evidence integrity, GitHub delivery, and cleanup.
-
-## TrialRun runs on Zerops. Each review gets its own lab.
-
-TrialRun itself runs on Zerops as four services: the web app, runner, PostgreSQL, and object storage.
-
-Each review creates one more short-lived Zerops project containing:
+TrialRun itself runs on Zerops as a web app, runner, PostgreSQL database, and object store. Each review creates one short-lived Zerops project containing:
 
 - the base app and its private data;
 - the PR app and separate private data;
 - a native Chromium executor that both apps can reach over the project's private network.
 
-The runner waits for every service to become ready before Codex starts. When the review ends, it deletes that exact project ID and waits until Zerops confirms it no longer exists.
+The runner waits for every service to become ready before Codex starts. When the review ends, it deletes that exact project ID and waits for Zerops to return `projectNotFound`.
 
-## What lands in GitHub
+## What GitHub gets
 
 - Codex's `pass`, `fail`, or `inconclusive` verdict;
 - exact code citations and a short explanation;
 - matched base/PR screenshots;
 - compact, genuine browser recordings;
-- a read-only evidence page with hashes, logs, API results, and teardown proof.
+- one read-only evidence page with hashes, logs, API results, and teardown proof.
 
-The recording shows what happened. Codex writes the verdict; TrialRun verifies its cited proof before publication.
+Codex writes the verdict. TrialRun checks that every cited line and evidence ID came from this exact run. It does not replace Codex with a hardcoded pass/fail script.
 
 <details>
-<summary><strong>Safety boundaries</strong></summary>
+<summary><strong>What Codex can and cannot touch</strong></summary>
 
-Customer code is untrusted. Codex can read the safe repository view and use TrialRun's narrow browser, API, and log tools. It cannot run arbitrary shell commands, write the checkout, call random hosts, or hold GitHub and Zerops credentials.
+Codex can read the repository and use TrialRun's browser, API, and log tools. It cannot write the checkout, call random hosts, or hold GitHub and Zerops credentials.
 
 The tested app receives only approved test values. Never use production database, payment, cloud, or personal credentials: any app can leak a value it receives.
 
-Every artifact is redacted, size-bounded, and SHA-256 checked before publication. A missing artifact, failed GitHub delivery, or unproved deletion cannot become a successful review.
+Every saved file is redacted, size-bounded, and SHA-256 checked before publication. A missing file, failed GitHub delivery, or unproved deletion cannot become a successful review.
 
 </details>
 
 <details>
-<summary><strong>Managed Codex or your own subscription</strong></summary>
+<summary><strong>Use TrialRun's Codex or connect yours</strong></summary>
 
-Every job is pinned to one Codex connection before it starts. TrialRun-managed Codex is the default. A customer can also connect their own subscription inside a dedicated Zerops ZCP workspace through OpenAI's device login.
+Every job is pinned to one Codex connection before it starts. TrialRun-managed Codex is the default. A customer can also connect their subscription inside a private Zerops ZCP workspace with OpenAI's device login.
 
 TrialRun never reads or copies `~/.codex/auth.json`. The workspace receives only short-lived access to one review's repository and live testing tools.
 

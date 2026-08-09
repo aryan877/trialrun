@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 540" role="img" aria-labelledby="title description" preserveAspectRatio="xMidYMid meet" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title id="title">How TrialRun turns any repository into a safe Zerops review lab</title>
+  <desc id="description">Codex explores the full repository with read-only tools and returns a cited typed plan. TrialRun verifies supported service types, resource limits, ports, health checks, and test secrets. TrialRun then generates the Zerops project import and exact source deployments for isolated base and pull request systems plus the test executor.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#111111" />
+    </marker>
+    <marker id="blue-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#2357ff" />
+    </marker>
+  </defs>
+
+  <rect width="1200" height="540" fill="#fbfbf8" />
+  <text x="40" y="54" font-size="32" font-weight="750" fill="#111111">The repo tells Codex what must run.</text>
+  <text x="40" y="86" font-size="16" fill="#5f5f59">No customer Zerops file. No hardcoded stack. Every choice must cite the exact commit.</text>
+
+  <rect x="40" y="125" width="230" height="350" rx="18" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
+  <rect x="58" y="145" width="70" height="26" rx="13" fill="#111111" />
+  <text x="93" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">GitHub</text>
+  <text x="58" y="210" font-size="23" font-weight="720" fill="#111111">Exact commit</text>
+  <text x="58" y="244" font-size="15" fill="#5f5f59">repository tree</text>
+  <text x="58" y="272" font-size="15" fill="#5f5f59">pull request diff</text>
+  <text x="58" y="300" font-size="15" fill="#5f5f59">source and tests</text>
+  <text x="58" y="328" font-size="15" fill="#5f5f59">build and start files</text>
+  <text x="58" y="356" font-size="15" fill="#5f5f59">routes and database clients</text>
+  <text x="58" y="384" font-size="15" fill="#5f5f59">environment variable names</text>
+  <rect x="58" y="420" width="194" height="35" rx="9" fill="#f4f4f0" />
+  <text x="155" y="442" text-anchor="middle" font-size="13" font-weight="650" fill="#111111">read only • exact SHA</text>
+
+  <path d="M270 300H315" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow)" />
+  <text x="293" y="284" text-anchor="middle" font-size="11" font-weight="650" fill="#5f5f59">tools</text>
+
+  <rect x="315" y="125" width="235" height="350" rx="18" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
+  <rect x="333" y="145" width="82" height="26" rx="13" fill="#ff3ca6" />
+  <text x="374" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Codex</text>
+  <text x="333" y="210" font-size="23" font-weight="720" fill="#111111">Explore and decide</text>
+  <text x="333" y="244" font-size="15" fill="#5f5f59">search any relevant file</text>
+  <text x="333" y="272" font-size="15" fill="#5f5f59">trace app entrypoints</text>
+  <text x="333" y="300" font-size="15" fill="#5f5f59">find managed dependencies</text>
+  <text x="333" y="328" font-size="15" fill="#5f5f59">choose the test target</text>
+  <text x="333" y="356" font-size="15" fill="#5f5f59">choose build and start commands</text>
+  <text x="333" y="384" font-size="15" fill="#5f5f59">cite every decision</text>
+  <rect x="333" y="420" width="199" height="35" rx="9" fill="#ffffff" stroke="#ff3ca6" />
+  <text x="432.5" y="442" text-anchor="middle" font-size="13" font-weight="650" fill="#8c155a">typed plan + source lines</text>
+
+  <path d="M550 300H595" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow)" />
+  <text x="573" y="284" text-anchor="middle" font-size="11" font-weight="650" fill="#5f5f59">plan</text>
+
+  <rect x="595" y="125" width="255" height="350" rx="18" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
+  <rect x="613" y="145" width="92" height="26" rx="13" fill="#2357ff" />
+  <text x="659" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">TrialRun</text>
+  <text x="613" y="210" font-size="23" font-weight="720" fill="#111111">Check and compile</text>
+  <text x="613" y="244" font-size="15" fill="#5f5f59">runtime + build base</text>
+  <text x="613" y="272" font-size="15" fill="#5f5f59">start command + port</text>
+  <text x="613" y="300" font-size="15" fill="#5f5f59">health route + env links</text>
+  <text x="613" y="328" font-size="15" fill="#5f5f59">supported Zerops services</text>
+  <text x="613" y="356" font-size="15" fill="#5f5f59">CPU, RAM, disk and count limits</text>
+  <text x="613" y="384" font-size="15" fill="#5f5f59">named test secrets only</text>
+  <rect x="613" y="420" width="219" height="35" rx="9" fill="#ffffff" stroke="#2357ff" />
+  <text x="722.5" y="442" text-anchor="middle" font-size="13" font-weight="650" fill="#2357ff">generated Zerops input</text>
+
+  <path d="M850 300H895" fill="none" stroke="#2357ff" stroke-width="2" marker-end="url(#blue-arrow)" />
+  <text x="873" y="273" text-anchor="middle" font-size="11" font-weight="650" fill="#2357ff">import</text>
+  <text x="873" y="287" text-anchor="middle" font-size="11" font-weight="650" fill="#2357ff">+ push</text>
+
+  <rect x="895" y="125" width="265" height="350" rx="18" fill="#f4f4f0" stroke="#02b3a4" stroke-width="2" />
+  <rect x="913" y="145" width="82" height="26" rx="13" fill="#02b3a4" />
+  <text x="954" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Zerops</text>
+  <text x="913" y="210" font-size="23" font-weight="720" fill="#111111">Run the real system</text>
+  <rect x="913" y="232" width="229" height="42" rx="9" fill="#ffffff" />
+  <text x="928" y="258" font-size="14" font-weight="650" fill="#111111">base app + base data</text>
+  <rect x="913" y="284" width="229" height="42" rx="9" fill="#ffffff" />
+  <text x="928" y="310" font-size="14" font-weight="650" fill="#111111">PR app + PR data</text>
+  <rect x="913" y="336" width="229" height="42" rx="9" fill="#ffffff" />
+  <text x="928" y="362" font-size="14" font-weight="650" fill="#111111">Chrome + API executor</text>
+  <text x="913" y="410" font-size="14" fill="#5f5f59">exact base and head source</text>
+  <text x="913" y="434" font-size="14" fill="#5f5f59">private network • readiness gated</text>
+
+  <text x="40" y="514" font-size="14" font-weight="650" fill="#111111">The customer approves a plain summary. TrialRun stores the approved fingerprint and reuses it until the repository architecture changes.</text>
+</svg>
