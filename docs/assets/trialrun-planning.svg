@@ -1,80 +1,147 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 540" role="img" aria-labelledby="title description" preserveAspectRatio="xMidYMid meet" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-  <title id="title">How TrialRun turns any repository into a safe Zerops review lab</title>
-  <desc id="description">Codex explores the full repository with read-only tools and returns a cited typed plan. TrialRun verifies supported service types, resource limits, ports, health checks, and test secrets. TrialRun then generates the Zerops project import and exact source deployments for isolated base and pull request systems plus the test executor.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 1200 560" role="img" aria-labelledby="planning-title planning-description" preserveAspectRatio="xMidYMid meet" font-family="Instrument Sans, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+  <title id="planning-title">From pull request to a private Zerops test lab</title>
+  <desc id="planning-description">GitHub supplies one exact pull request. Codex explores the repository and decides what must run and what should be tested. TrialRun checks that plan against hard safety limits. Zerops then boots separate base and pull request applications, separate data, and one Chrome and API executor.</desc>
   <defs>
-    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-      <path d="M0 0L8 4L0 8Z" fill="#111111" />
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#111111" flood-opacity="0.09" />
+    </filter>
+    <marker id="arrow-black" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0L9 4.5L0 9Z" fill="#111111" />
     </marker>
-    <marker id="blue-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-      <path d="M0 0L8 4L0 8Z" fill="#2357ff" />
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0L9 4.5L0 9Z" fill="#2357ff" />
     </marker>
+    <symbol id="github-mark" viewBox="0 0 98 96">
+      <path d="M41.44 69.385C28.807 67.854 19.906 58.762 19.906 46.99c0-4.785 1.723-9.953 4.594-13.398-1.244-3.158-1.053-9.857.383-12.633 3.828-.478 8.996 1.531 12.058 4.307 3.637-1.149 7.465-1.723 12.155-1.723 4.689 0 8.517.574 11.962 1.627 2.967-2.68 8.231-4.69 12.059-4.211 1.34 2.584 1.531 9.283.287 12.537 3.063 3.637 4.69 8.518 4.69 13.494 0 11.772-8.901 20.672-21.725 22.299 3.254 2.105 5.455 6.699 5.455 11.963v9.953c0 2.871 2.393 4.498 5.264 3.35C84.41 87.95 98 70.629 98 49.191 98 22.107 75.988 0 48.904 0S0 22.107 0 49.191c0 21.247 13.494 38.856 31.678 45.459 2.584.957 5.072-.765 5.072-3.349v-7.657c-1.34.575-3.063.958-4.594.958-6.316 0-10.049-3.446-12.728-9.858-1.053-2.584-2.201-4.115-4.403-4.402-1.148-.096-1.531-.574-1.531-1.149 0-1.148 1.914-2.009 3.828-2.009 2.776 0 5.168 1.722 7.657 5.263 1.914 2.776 3.923 4.02 6.316 4.02s3.924-.861 6.125-3.063c1.627-1.627 2.871-3.062 4.02-4.019Z" fill="#111111" />
+    </symbol>
+    <symbol id="codex-mark" viewBox="0 0 716 716">
+      <path d="M508.749 317.399c8.028-30.085.242-63.515-23.36-87.117-23.601-23.601-57.029-31.387-87.116-23.359-22.042-21.995-54.883-31.967-87.125-23.327-32.242 8.638-55.698 33.696-63.788 63.765-30.069 8.09-55.127 31.549-63.765 63.788-8.638 32.242 1.332 65.083 23.329 87.125-8.028 30.085-.241 63.515 23.36 87.117 23.601 23.601 57.029 31.388 87.117 23.359 22.041 21.995 54.885 31.967 87.124 23.329 32.242-8.638 55.698-33.695 63.788-63.764 30.07-8.091 55.127-31.549 63.765-63.789 8.638-32.241-1.331-65.083-23.329-87.124v-.003Zm-37.85-72.623c15.993 15.994 22.589 37.825 19.788 58.636l-75.11-43.366a10.23 10.23 0 0 0-10.232 0l-87.944 50.774v-33.294a6.57 6.57 0 0 1 3.275-5.689l66.968-38.663c26.534-14.821 60.702-10.951 83.257 11.602h-.002Zm-113.062 66.368 40.438 23.347v46.694l-40.438 23.347-40.439-23.347v-46.694l40.439-23.347Zm-93.061-41.451c.431-30.388 20.868-58.044 51.677-66.3 21.847-5.853 44.052-.649 60.674 12.18l-75.113 43.364a10.23 10.23 0 0 0-5.116 8.861v101.548l-28.833-16.647a6.58 6.58 0 0 1-3.289-5.682v-77.326.002Zm-61.385 46.761c5.853-21.846 21.463-38.476 40.885-46.455v86.731a10.23 10.23 0 0 0 5.116 8.861l87.945 50.774-28.834 16.648a6.58 6.58 0 0 1-6.564.007l-66.968-38.663c-26.103-15.568-39.833-47.096-31.58-77.903Zm41.384 154.446c-15.994-15.994-22.589-37.825-19.789-58.636l75.11 43.366a10.23 10.23 0 0 0 10.232 0l87.945-50.774v33.293a6.57 6.57 0 0 1-3.276 5.69l-66.968 38.663c-26.534 14.82-60.702 10.95-83.257-11.602h.003Zm206.122-24.918c-.431 30.389-20.868 58.045-51.677 66.301-21.847 5.853-44.052.649-60.673-12.181l75.112-43.364a10.23 10.23 0 0 0 5.116-8.861V346.329l28.834 16.648a6.58 6.58 0 0 1 3.288 5.682v77.326-.003Zm61.385-46.761c-5.853 21.847-21.463 38.476-40.885 46.455v-86.73a10.23 10.23 0 0 0-5.116-8.861l-87.945-50.774 28.834-16.648a6.58 6.58 0 0 1 6.564-.008l66.968 38.663c26.103 15.569 39.834 47.097 31.58 77.903Z" fill="#111111" />
+    </symbol>
+    <symbol id="trialrun-mark" viewBox="0 0 32 32">
+      <rect x=".5" y=".5" width="31" height="31" rx="7.5" fill="#fbfbf8" stroke="#111111" stroke-opacity=".13" />
+      <path d="M4 6h11v20H4z" fill="#111111" />
+      <path d="M17 6h11v20H17z" fill="#2357ff" />
+      <path d="M12.5 12h7v8h-7z" fill="#ff3ca6" />
+    </symbol>
+    <symbol id="zerops-mark" viewBox="0 0 43 51">
+      <path d="M19.73.26 2.54 6.83A3.95 3.95 0 0 0 0 10.52V27.1l7.9-4.56v-9.3l13.24-5.06V0c-.48 0-.96.09-1.41.26Z" fill="#3dbeb3" />
+      <path d="m8.04 37.3 13.1-7.56v-9.12L.9 32.3a1.8 1.8 0 0 0-.9 1.56v6.11c0 1.63 1.02 3.11 2.54 3.69l17.19 6.57c.45.17.93.26 1.41.26v-8.18L8.04 37.3Z" fill="#3dbeb3" />
+      <path d="M41.44 18.03c.52-.3.84-.85.84-1.45v-6.06c0-1.63-1.02-3.11-2.54-3.69L22.55.26c-.45-.17-.93-.26-1.41-.26v8.18l12.97 4.96-12.97 7.49v9.12l20.3-11.71Z" fill="#02b3a4" />
+      <path d="m22.55 50.23 17.19-6.57c1.52-.58 2.54-2.06 2.54-3.69v-16.7l-7.9 4.56v9.43l-13.24 5.06v8.18c.48 0 .96-.09 1.41-.26Z" fill="#02b3a4" />
+    </symbol>
   </defs>
 
-  <rect width="1200" height="540" fill="#fbfbf8" />
-  <text x="40" y="54" font-size="32" font-weight="750" fill="#111111">The repo tells Codex what must run.</text>
-  <text x="40" y="86" font-size="16" fill="#5f5f59">No customer Zerops file. No hardcoded stack. Every choice must cite the exact commit.</text>
+  <rect width="1200" height="560" fill="#fbfbf8" />
+  <text x="42" y="51" font-size="33" font-weight="760" fill="#111111">From pull request to live test lab.</text>
+  <text x="42" y="80" font-size="16" fill="#5f5f59">Codex figures out the stack. TrialRun keeps it safe. Zerops runs it for real.</text>
 
-  <rect x="40" y="125" width="230" height="350" rx="18" fill="#fbfbf8" stroke="#d8d8d2" stroke-width="2" />
-  <rect x="58" y="145" width="70" height="26" rx="13" fill="#111111" />
-  <text x="93" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">GitHub</text>
-  <text x="58" y="210" font-size="23" font-weight="720" fill="#111111">Exact commit</text>
-  <text x="58" y="244" font-size="15" fill="#5f5f59">repository tree</text>
-  <text x="58" y="272" font-size="15" fill="#5f5f59">pull request diff</text>
-  <text x="58" y="300" font-size="15" fill="#5f5f59">source and tests</text>
-  <text x="58" y="328" font-size="15" fill="#5f5f59">build and start files</text>
-  <text x="58" y="356" font-size="15" fill="#5f5f59">routes and database clients</text>
-  <text x="58" y="384" font-size="15" fill="#5f5f59">environment variable names</text>
-  <rect x="58" y="420" width="194" height="35" rx="9" fill="#f4f4f0" />
-  <text x="155" y="442" text-anchor="middle" font-size="13" font-weight="650" fill="#111111">read only • exact SHA</text>
+  <!-- Exact repository -->
+  <g filter="url(#shadow)">
+    <rect x="42" y="122" width="240" height="356" rx="22" fill="#ffffff" stroke="#d8d8d2" stroke-width="2" />
+  </g>
+  <use href="#github-mark" x="64" y="145" width="34" height="34" />
+  <text x="110" y="169" font-size="16" font-weight="720" fill="#111111">GitHub PR</text>
+  <rect x="64" y="197" width="196" height="184" rx="13" fill="#111111" />
+  <circle cx="81" cy="214" r="4" fill="#ff4fa3" />
+  <circle cx="94" cy="214" r="4" fill="#b9ff56" />
+  <circle cx="107" cy="214" r="4" fill="#5dd8ff" />
+  <text x="80" y="247" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#fbfbf8">apps/storefront</text>
+  <text x="80" y="276" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#fbfbf8">api/cart.ts</text>
+  <text x="80" y="305" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#fbfbf8">db/schema</text>
+  <rect x="78" y="326" width="145" height="5" rx="2.5" fill="#333333" />
+  <rect x="78" y="342" width="108" height="5" rx="2.5" fill="#ff4fa3" />
+  <rect x="78" y="358" width="128" height="5" rx="2.5" fill="#b9ff56" />
+  <text x="64" y="416" font-size="22" font-weight="740" fill="#111111">One exact commit</text>
+  <text x="64" y="445" font-size="15" fill="#5f5f59">tree · diff · tests · config</text>
 
-  <path d="M270 300H315" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow)" />
-  <text x="293" y="284" text-anchor="middle" font-size="11" font-weight="650" fill="#5f5f59">tools</text>
+  <!-- Codex explores -->
+  <path d="M282 298H329" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow-black)" />
+  <text x="305" y="282" text-anchor="middle" font-size="12" font-weight="700" fill="#5f5f59">read</text>
+  <g filter="url(#shadow)">
+    <rect x="330" y="122" width="246" height="356" rx="28" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
+  </g>
+  <text x="354" y="166" font-size="16" font-weight="720" fill="#8c155a">Codex</text>
+  <circle cx="453" cy="254" r="73" fill="#ff4fa3" />
+  <circle cx="453" cy="254" r="57" fill="#fbfbf8" />
+  <use href="#codex-mark" x="416" y="217" width="74" height="74" />
+  <path d="M395 208 368 187" stroke="#ff3ca6" stroke-width="2" />
+  <path d="M511 208 538 187" stroke="#ff3ca6" stroke-width="2" />
+  <path d="M390 302 360 329" stroke="#ff3ca6" stroke-width="2" />
+  <path d="M516 302 546 329" stroke="#ff3ca6" stroke-width="2" />
+  <rect x="348" y="174" width="82" height="27" rx="13.5" fill="#ffffff" />
+  <text x="389" y="192" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">entrypoints</text>
+  <rect x="480" y="174" width="78" height="27" rx="13.5" fill="#ffffff" />
+  <text x="519" y="192" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">data</text>
+  <rect x="346" y="319" width="72" height="27" rx="13.5" fill="#ffffff" />
+  <text x="382" y="337" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">build</text>
+  <rect x="490" y="319" width="68" height="27" rx="13.5" fill="#ffffff" />
+  <text x="524" y="337" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">tests</text>
+  <text x="453" y="397" text-anchor="middle" font-size="22" font-weight="740" fill="#111111">Codex maps the repo</text>
+  <text x="453" y="426" text-anchor="middle" font-size="15" fill="#5f5f59">what runs · what to test</text>
+  <rect x="378" y="447" width="150" height="8" rx="4" fill="#ff3ca6" />
 
-  <rect x="315" y="125" width="235" height="350" rx="18" fill="#fff0f8" stroke="#ff3ca6" stroke-width="2" />
-  <rect x="333" y="145" width="82" height="26" rx="13" fill="#ff3ca6" />
-  <text x="374" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Codex</text>
-  <text x="333" y="210" font-size="23" font-weight="720" fill="#111111">Explore and decide</text>
-  <text x="333" y="244" font-size="15" fill="#5f5f59">search any relevant file</text>
-  <text x="333" y="272" font-size="15" fill="#5f5f59">trace app entrypoints</text>
-  <text x="333" y="300" font-size="15" fill="#5f5f59">find managed dependencies</text>
-  <text x="333" y="328" font-size="15" fill="#5f5f59">choose the test target</text>
-  <text x="333" y="356" font-size="15" fill="#5f5f59">choose build and start commands</text>
-  <text x="333" y="384" font-size="15" fill="#5f5f59">cite every decision</text>
-  <rect x="333" y="420" width="199" height="35" rx="9" fill="#ffffff" stroke="#ff3ca6" />
-  <text x="432.5" y="442" text-anchor="middle" font-size="13" font-weight="650" fill="#8c155a">typed plan + source lines</text>
+  <!-- TrialRun safety gate -->
+  <path d="M576 298H624" fill="none" stroke="#111111" stroke-width="2.5" marker-end="url(#arrow-black)" />
+  <text x="600" y="282" text-anchor="middle" font-size="12" font-weight="700" fill="#5f5f59">plan</text>
+  <g filter="url(#shadow)">
+    <rect x="625" y="160" width="168" height="280" rx="22" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
+  </g>
+  <use href="#trialrun-mark" x="649" y="183" width="38" height="38" />
+  <text x="699" y="208" font-size="16" font-weight="730" fill="#111111">TrialRun</text>
+  <text x="649" y="253" font-size="21" font-weight="750" fill="#111111">Safe to boot</text>
+  <rect x="649" y="274" width="120" height="38" rx="9" fill="#ffffff" />
+  <circle cx="667" cy="293" r="8" fill="#b9ff56" />
+  <path d="m663 293 3 3 6-7" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="682" y="298" font-size="13" font-weight="650" fill="#111111">Node + Postgres</text>
+  <rect x="649" y="321" width="120" height="38" rx="9" fill="#ffffff" />
+  <circle cx="667" cy="340" r="8" fill="#b9ff56" />
+  <path d="m663 340 3 3 6-7" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="682" y="345" font-size="13" font-weight="650" fill="#111111">Port + health</text>
+  <rect x="649" y="368" width="120" height="38" rx="9" fill="#ffffff" />
+  <circle cx="667" cy="387" r="8" fill="#b9ff56" />
+  <path d="m663 387 3 3 6-7" fill="none" stroke="#111111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <text x="682" y="392" font-size="13" font-weight="650" fill="#111111">Test env only</text>
 
-  <path d="M550 300H595" fill="none" stroke="#111111" stroke-width="2" marker-end="url(#arrow)" />
-  <text x="573" y="284" text-anchor="middle" font-size="11" font-weight="650" fill="#5f5f59">plan</text>
+  <!-- Live Zerops lab -->
+  <path d="M793 298H839" fill="none" stroke="#2357ff" stroke-width="2.5" marker-end="url(#arrow-blue)" />
+  <text x="816" y="282" text-anchor="middle" font-size="12" font-weight="700" fill="#2357ff">boot</text>
+  <g filter="url(#shadow)">
+    <rect x="840" y="112" width="320" height="376" rx="26" fill="#f2fffc" stroke="#02b3a4" stroke-width="2.5" />
+  </g>
+  <use href="#zerops-mark" x="865" y="136" width="26" height="31" />
+  <text x="904" y="160" font-size="17" font-weight="740" fill="#02a99b">Zerops live lab</text>
+  <circle cx="1129" cy="151" r="6" fill="#31c768" />
+  <text x="1113" y="179" text-anchor="end" font-size="11" font-weight="700" fill="#25874a">READY</text>
 
-  <rect x="595" y="125" width="255" height="350" rx="18" fill="#eef2ff" stroke="#2357ff" stroke-width="2" />
-  <rect x="613" y="145" width="92" height="26" rx="13" fill="#2357ff" />
-  <text x="659" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">TrialRun</text>
-  <text x="613" y="210" font-size="23" font-weight="720" fill="#111111">Check and compile</text>
-  <text x="613" y="244" font-size="15" fill="#5f5f59">runtime + build base</text>
-  <text x="613" y="272" font-size="15" fill="#5f5f59">start command + port</text>
-  <text x="613" y="300" font-size="15" fill="#5f5f59">health route + env links</text>
-  <text x="613" y="328" font-size="15" fill="#5f5f59">supported Zerops services</text>
-  <text x="613" y="356" font-size="15" fill="#5f5f59">CPU, RAM, disk and count limits</text>
-  <text x="613" y="384" font-size="15" fill="#5f5f59">named test secrets only</text>
-  <rect x="613" y="420" width="219" height="35" rx="9" fill="#ffffff" stroke="#2357ff" />
-  <text x="722.5" y="442" text-anchor="middle" font-size="13" font-weight="650" fill="#2357ff">generated Zerops input</text>
+  <rect x="864" y="196" width="126" height="116" rx="14" fill="#ffffff" stroke="#d8d8d2" stroke-width="1.5" />
+  <rect x="1008" y="196" width="126" height="116" rx="14" fill="#ffffff" stroke="#ff4fa3" stroke-width="1.5" />
+  <rect x="878" y="211" width="36" height="20" rx="10" fill="#111111" />
+  <text x="896" y="225" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">BASE</text>
+  <rect x="1022" y="211" width="30" height="20" rx="10" fill="#ff4fa3" />
+  <text x="1037" y="225" text-anchor="middle" font-size="10" font-weight="700" fill="#ffffff">PR</text>
+  <rect x="878" y="246" width="98" height="22" rx="6" fill="#eef2ff" />
+  <text x="927" y="261" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">live app</text>
+  <rect x="878" y="276" width="98" height="22" rx="6" fill="#f4f4f0" />
+  <text x="927" y="291" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">private data</text>
+  <rect x="1022" y="246" width="98" height="22" rx="6" fill="#fff0f8" />
+  <text x="1071" y="261" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">live app</text>
+  <rect x="1022" y="276" width="98" height="22" rx="6" fill="#f4f4f0" />
+  <text x="1071" y="291" text-anchor="middle" font-size="12" font-weight="680" fill="#111111">private data</text>
 
-  <path d="M850 300H895" fill="none" stroke="#2357ff" stroke-width="2" marker-end="url(#blue-arrow)" />
-  <text x="873" y="273" text-anchor="middle" font-size="11" font-weight="650" fill="#2357ff">import</text>
-  <text x="873" y="287" text-anchor="middle" font-size="11" font-weight="650" fill="#2357ff">+ push</text>
+  <path d="M927 312V339H999" fill="none" stroke="#5f5f59" stroke-width="1.5" />
+  <path d="M1071 312V339H999" fill="none" stroke="#5f5f59" stroke-width="1.5" />
+  <rect x="864" y="339" width="270" height="105" rx="14" fill="#111111" />
+  <circle cx="894" cy="369" r="13" fill="#ffffff" />
+  <circle cx="894" cy="369" r="9" fill="#2357ff" />
+  <path d="M894 356a13 13 0 0 1 11.3 6.5h-11.3Z" fill="#ea4335" />
+  <path d="m882.7 362.5 11.3 19.5a13 13 0 0 1-11.3-19.5Z" fill="#34a853" />
+  <path d="m905.3 362.5-11.3 19.5h.1a13 13 0 0 0 11.2-19.5Z" fill="#fbbc04" />
+  <text x="919" y="368" font-size="15" font-weight="720" fill="#ffffff">Chrome + HTTP</text>
+  <text x="919" y="391" font-size="13" fill="#c9c9c2">same Codex · both commits</text>
+  <rect x="882" y="411" width="234" height="5" rx="2.5" fill="#333333" />
+  <rect x="882" y="411" width="158" height="5" rx="2.5" fill="#5dd8ff" />
+  <text x="999" y="434" text-anchor="middle" font-size="11" font-weight="650" fill="#b9ff56">private network</text>
 
-  <rect x="895" y="125" width="265" height="350" rx="18" fill="#f4f4f0" stroke="#02b3a4" stroke-width="2" />
-  <rect x="913" y="145" width="82" height="26" rx="13" fill="#02b3a4" />
-  <text x="954" y="163" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff">Zerops</text>
-  <text x="913" y="210" font-size="23" font-weight="720" fill="#111111">Run the real system</text>
-  <rect x="913" y="232" width="229" height="42" rx="9" fill="#ffffff" />
-  <text x="928" y="258" font-size="14" font-weight="650" fill="#111111">base app + base data</text>
-  <rect x="913" y="284" width="229" height="42" rx="9" fill="#ffffff" />
-  <text x="928" y="310" font-size="14" font-weight="650" fill="#111111">PR app + PR data</text>
-  <rect x="913" y="336" width="229" height="42" rx="9" fill="#ffffff" />
-  <text x="928" y="362" font-size="14" font-weight="650" fill="#111111">Chrome + API executor</text>
-  <text x="913" y="410" font-size="14" fill="#5f5f59">exact base and head source</text>
-  <text x="913" y="434" font-size="14" fill="#5f5f59">private network • readiness gated</text>
-
-  <text x="40" y="514" font-size="14" font-weight="650" fill="#111111">The customer approves a plain summary. TrialRun stores the approved fingerprint and reuses it until the repository architecture changes.</text>
+  <rect x="42" y="510" width="1118" height="34" rx="10" fill="#111111" />
+  <text x="601" y="532" text-anchor="middle" font-size="14" font-weight="660" fill="#fbfbf8">The developer approves: “web app + Postgres + UI/API test.” TrialRun handles the Zerops setup.</text>
 </svg>
