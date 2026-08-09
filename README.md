@@ -5,7 +5,7 @@
 <h1 align="center">Codex tests the app you have and the app your pull request creates, live on Zerops.</h1>
 
 <p align="center">
-  TrialRun starts both versions with separate data. Codex reads the code, drives Chrome, calls the live APIs, and checks Zerops logs. TrialRun posts the verdict, screenshots, and video to GitHub after Zerops deletes the test project.
+  Connect a repository. Codex works out what must run and what should be tested. TrialRun generates the Zerops setup. Zerops runs the current app and the pull request version with separate data. Codex tests both through code, Chrome, live APIs, and service logs. GitHub gets the verdict and recorded proof after the temporary lab is gone.
 </p>
 
 <p align="center">
@@ -53,7 +53,24 @@ For a Zerops review, TrialRun reads each app's recent output with `zcli service 
 
 ![Codex explores the full exact commit, returns a cited typed run plan, TrialRun checks and compiles it, and Zerops runs isolated base and pull request systems](docs/assets/trialrun-planning.svg)
 
-Codex can search and read the full, exact commit. It follows entrypoints, build scripts, routes, database clients, and environment names until it knows what must run. TrialRun checks that answer against hard resource and security limits, then generates the Zerops input. The customer never writes `zerops.yaml`.
+The developer never writes `zerops.yaml`.
+
+1. **Codex maps the repository.** It searches the exact commit, follows entrypoints and data clients, and identifies the apps, background workers, data services, build commands, start commands, ports, health checks, environment links, and useful tests.
+2. **TrialRun checks the answer.** Normal TypeScript rejects unsupported services, arbitrary public ports, missing readiness checks, production credentials, and plans that exceed the CPU, RAM, disk, or service limits.
+3. **TrialRun generates the Zerops setup.** It creates the project import and each service's deployment file. Those files tell Zerops what to build, how the services connect privately, when they are ready, and how many resources they may use. Codex never receives the Zerops account credential.
+4. **Zerops runs the real system.** It builds the current app and the version proposed by the pull request, gives each one separate data, and starts the Chrome and API executor beside them on the same private network.
+
+### What it can generate today
+
+| Repository needs       | TrialRun can choose automatically                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------- |
+| Application runtimes   | Node.js, Python, Go, PHP, .NET, Java, Rust, Ruby, Bun, Deno, Elixir, Gleam, static sites, and Nginx |
+| Databases and caches   | PostgreSQL, MariaDB/MySQL, and Valkey/Redis-compatible cache                                        |
+| Search and vector data | Elasticsearch, Meilisearch, Typesense, Qdrant, and ClickHouse                                       |
+| Messaging              | NATS and Kafka                                                                                      |
+| Files                  | Private object storage and shared storage                                                           |
+
+Zerops can run additional custom software in Ubuntu, Alpine, or Docker. TrialRun's automatic path is deliberately smaller: Codex may explore any safe repository, but it can only choose a service that TrialRun knows how to configure, isolate, test, and delete safely. MongoDB is not in that automatic list today, so TrialRun blocks it instead of inventing an unsafe deployment.
 
 ## One PR gets one private lab
 

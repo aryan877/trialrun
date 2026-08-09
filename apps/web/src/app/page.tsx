@@ -15,8 +15,8 @@ import { publicAuth } from "@/lib/auth";
 const reviewRoles = [
   {
     image: "/brand/openai.svg",
-    name: "One Codex thread understands the change",
-    copy: "It reads the safe repository, exact diff, and tests before touching the app.",
+    name: "Codex maps the whole repository",
+    copy: "It follows entrypoints, data clients, build scripts, and tests to work out what must run.",
   },
   {
     image: "/brand/zerops.svg",
@@ -44,22 +44,24 @@ export default async function Home() {
           <div className="flex items-center px-5 py-12 sm:px-8 sm:py-20 lg:px-12 lg:py-12 xl:px-16">
             <div className="max-w-[640px]">
               <p className="mb-7 text-[15px] font-medium text-black/55">
-                Evidence-backed pull request review
+                From GitHub repository to live proof
               </p>
               <h1 className="text-[clamp(3.2rem,6vw,5.75rem)] leading-[0.94] font-semibold tracking-[-0.065em] text-balance">
                 Know what the PR breaks.
               </h1>
               <p className="mt-7 max-w-xl text-lg leading-7 text-black/62 sm:text-xl sm:leading-8">
-                One Codex thread reads the repository and PR, then tests the code, UI, APIs, and
-                logs against isolated base and changed apps on Zerops. TrialRun records the proof,
-                publishes Codex&apos;s verdict, and proves the review project was deleted.
+                Connect a GitHub repository. Codex explores the whole codebase and works out which
+                apps, data services, build commands, ports, and tests are needed. TrialRun checks
+                that plan, and Zerops builds the current app and pull-request version with separate
+                data. The same Codex thread tests their code, UI, APIs, and logs before TrialRun
+                posts the recorded proof.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
                 <Link
                   className="inline-flex h-13 items-center justify-center rounded-md bg-[#111111] px-6 text-[15px] font-semibold text-white transition-transform hover:-translate-y-px hover:bg-black focus-visible:ring-2 focus-visible:ring-[#2357ff] focus-visible:ring-offset-2 focus-visible:outline-none"
                   href={workspaceHref}
                 >
-                  {auth ? "Open workspace" : "Run a pull request"}
+                  {auth ? "Open workspace" : "Connect a repository"}
                   <ArrowRight aria-hidden="true" className="ml-2 size-[18px]" weight="bold" />
                 </Link>
                 <a

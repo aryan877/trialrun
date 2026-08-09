@@ -88,9 +88,10 @@ export function RepositoryToLabStory() {
           </div>
           <div className="max-w-2xl lg:justify-self-end">
             <p className="text-lg leading-8 text-black/62">
-              There is no fixed manifest list and no customer Zerops file. Codex explores the full,
-              exact commit until it can explain the app, its data, and the highest-value test. A
-              maintainer approves one plain sentence.
+              Install the TrialRun GitHub App and choose a repository. There is no fixed manifest
+              list and no customer Zerops file. Codex explores the full, exact commit until it can
+              explain the apps, data services, build commands, ports, and tests. A maintainer
+              approves one plain summary.
             </p>
             <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#eef1ff] px-4 py-2 text-sm font-semibold text-[#173eb8]">
               <Check aria-hidden="true" className="size-4" weight="bold" />
@@ -183,8 +184,8 @@ export function RepositoryToLabStory() {
               ))}
             </ul>
             <p className="mt-5 text-sm leading-6 text-black/58">
-              Normal TypeScript turns the approved answer into TrialRun-owned Zerops input. Codex
-              never gets the cloud key.
+              TrialRun generates the Zerops service setup: build, start, ports, health checks,
+              private links, and hard resource limits. Codex never gets the cloud key.
             </p>
             <StepArrow />
           </article>
@@ -226,9 +227,7 @@ export function RepositoryToLabStory() {
             The model recommends. TrialRun enforces the limits and owns deployment.
           </p>
           <p className="inline-flex items-center gap-2 font-medium text-black/72">
-            No customer{" "}
-            <code className="rounded bg-black/6 px-1.5 py-0.5 font-mono text-xs">zerops.yaml</code>{" "}
-            needed
+            TrialRun generates the Zerops files. The developer writes none.
           </p>
         </div>
       </div>
