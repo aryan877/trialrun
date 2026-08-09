@@ -2,10 +2,10 @@
   <img src="docs/assets/logos/trialrun.svg" width="72" height="72" alt="TrialRun" />
 </p>
 
-<h1 align="center">Codex runs the current app and the proposed change in a private Zerops lab.</h1>
+<h1 align="center">A code reviewer that tests what your pull request actually does.</h1>
 
 <p align="center">
-  Connect GitHub. Codex maps the repository and decides what must run. TrialRun turns that into a checked Zerops setup. Zerops starts the current app and the proposed change with separate data. Codex investigates both through code, Chrome, HTTP, and logs; GitHub gets the recorded proof after the lab is deleted.
+  Connect GitHub. TrialRun boots the current app and the proposed version with separate data inside a private Zerops lab. Codex reads the code, drives both apps in Chrome, calls their live APIs, and checks their Zerops service logs. GitHub gets the verdict and recorded proof after the lab is deleted.
 </p>
 
 <p align="center">
