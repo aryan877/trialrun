@@ -2,7 +2,7 @@
   <img src="docs/assets/logos/trialrun.svg" width="72" height="72" alt="TrialRun" />
 </p>
 
-<h1 align="center">A code reviewer that tests what your pull request actually does.</h1>
+<h1 align="center">An AI code reviewer that deploys and tests your pull request in a private Zerops lab.</h1>
 
 <p align="center">
   Connect GitHub. TrialRun boots the current app and the proposed version with separate data inside a private Zerops lab. Codex reads the code, drives both apps in Chrome, calls their live APIs, and checks their Zerops service logs. GitHub gets the verdict and recorded proof after the lab is deleted.
