@@ -9,7 +9,6 @@
 </p>
 
 <p align="center">
-  <a href="https://trialrun.aryankumar.dev"><strong>Open TrialRun</strong></a> ·
   <a href="https://github.com/apps/trialrun-by-aryan">Install the GitHub App</a> ·
   <a href="https://github.com/aryan877/trialrun-proof/pull/4">See the proof PR</a>
 </p>
@@ -20,17 +19,15 @@
 
 On [proof PR #4](https://github.com/aryan877/trialrun-proof/pull/4), Codex read the cart change, ran the existing app beside the pull request version, and clicked the same second product in each one. The existing app changed item two. The pull request changed item one. Live API calls still returned the right total, so Codex isolated the bug to the pull request's browser handler and cited the exact lines.
 
-[![TrialRun's public verdict for the reproduced pull request regression](docs/assets/screenshots/trialrun-verdict.jpg)](https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE)
+![TrialRun's public verdict for the reproduced pull request regression](docs/assets/screenshots/trialrun-verdict.jpg)
 
 This one review used 13 repository reads and searches, 17 live browser operations, 4 live API responses, and both applications' Zerops logs. Codex wrote the finding; TrialRun kept the evidence tied to the exact commits.
 
-[![Matched base and pull request screenshots, API evidence, GitHub publication, and confirmed Zerops teardown](docs/assets/screenshots/trialrun-live-proof.jpg)](https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE)
+![Matched base and pull request screenshots, API evidence, GitHub publication, and confirmed Zerops teardown](docs/assets/screenshots/trialrun-live-proof.jpg)
 
-These WebMs are not demo clips or manual uploads. TrialRun's Chrome executor recorded them automatically inside the temporary Zerops project while Codex drove both live apps. The same run captured API responses and Zerops service logs before the project was deleted.
+The recordings were not demo clips or manual uploads. TrialRun's Chrome executor recorded them automatically inside the temporary Zerops project while Codex drove both live apps. The same run captured API responses and Zerops service logs before the project was deleted.
 
-[Watch the base WebM](https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE/artifacts/a8594caa-7cd0-4cc8-9ecf-c99af4936c3b) · [Watch the pull request WebM](https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE/artifacts/e3541c1b-653a-4724-b667-fb913bb3675a)
-
-[GitHub Check](https://github.com/aryan877/trialrun-proof/runs/93265050893) · [Bot comment](https://github.com/aryan877/trialrun-proof/pull/4#issuecomment-5232414375) · [Open the public proof](https://trialrun.aryankumar.dev/proof/reviews/426b3539-3d48-46de-bd6d-8bb78a24c2ca/p1_SHdqvYNZ60xdFOzF9-qT2hTiPTXlbtzQW2T6E0yrfoE)
+[GitHub Check](https://github.com/aryan877/trialrun-proof/runs/93265050893) · [Bot comment](https://github.com/aryan877/trialrun-proof/pull/4#issuecomment-5232414375)
 
 Zerops then deleted project `bm8bQgyTQrC23Kqm5spgnA` in process `t2l5VUuSRhuwTW6FAHx7FA`. TrialRun waited until the exact project lookup returned `projectNotFound`, then published the result.
 
